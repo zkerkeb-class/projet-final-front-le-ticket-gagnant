@@ -1,8 +1,16 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "./node_modules/expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "jsx": "react-jsx",
+    "types": [
+      "node",
+      "expo-router/types"
+    ],
     "paths": {
+      "expo-router": [
+        "./node_modules/expo-router/build/index"
+      ],
       "@/*": [
         "./*"
       ]

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
+import { casinoTheme } from "./casinoTheme";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,32 +31,38 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <View style={styles.backgroundLayerA} />
+      <View style={styles.backgroundLayerB} />
+
       <View style={styles.inner}>
-        <Text style={styles.title}>🎰 Le Ticket Gagnant</Text>
-        <Text style={styles.subtitle}>Connectez-vous pour jouer</Text>
+        <View style={styles.card}>
+          <Text style={styles.title}>LE TICKET GAGNANT</Text>
+          <Text style={styles.subtitle}>Connectez-vous à votre lounge casino</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={casinoTheme.colors.textMuted}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Mot de passe"
-          placeholderTextColor="#999"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Mot de passe"
+            placeholderTextColor={casinoTheme.colors.textMuted}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Se connecter</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <View style={styles.buttonGloss} />
+            <Text style={styles.buttonText}>Accéder au casino</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -64,49 +71,85 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: casinoTheme.colors.bg,
+    position: "relative",
+  },
+  backgroundLayerA: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: casinoTheme.colors.bg,
+  },
+  backgroundLayerB: {
+    position: "absolute",
+    top: -120,
+    left: -110,
+    right: -110,
+    height: 360,
+    borderRadius: 220,
+    backgroundColor: "rgba(74, 132, 255, 0.15)",
   },
   inner: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
+    backgroundColor: "transparent",
+  },
+  card: {
+    width: "100%",
+    maxWidth: 430,
+    borderWidth: 1,
+    borderColor: casinoTheme.colors.panelBorder,
+    borderRadius: casinoTheme.radius.xl,
+    backgroundColor: casinoTheme.colors.panel,
+    padding: 20,
+    gap: 12,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 8,
+    color: casinoTheme.colors.cyan,
+    fontSize: 28,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 1,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#888",
-    marginBottom: 32,
+    fontSize: 14,
+    color: casinoTheme.colors.textMuted,
+    marginBottom: 6,
+    textAlign: "center",
   },
   input: {
     width: "100%",
-    maxWidth: 400,
     height: 50,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
+    borderColor: casinoTheme.colors.inputBorder,
+    borderRadius: casinoTheme.radius.md,
     paddingHorizontal: 16,
-    marginBottom: 16,
     fontSize: 16,
-    backgroundColor: "#fff",
-    color: "#000",
+    backgroundColor: casinoTheme.colors.inputBg,
+    color: casinoTheme.colors.text,
   },
   button: {
     width: "100%",
-    maxWidth: 400,
     height: 50,
-    backgroundColor: "#4CAF50",
-    borderRadius: 8,
+    backgroundColor: casinoTheme.colors.gold,
+    borderRadius: casinoTheme.radius.md,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
+    overflow: "hidden",
+  },
+  buttonGloss: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: "46%",
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    color: "#141824",
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
 });
