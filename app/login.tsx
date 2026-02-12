@@ -1,29 +1,95 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
 import { casinoTheme } from "./casinoTheme";
 
+const BLACKJACK_API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+const getApiBaseUrls = (): string[] => {
+  if (BLACKJACK_API_URL) {
+    return [BLACKJACK_API_URL.replace(/\/games\/blackjack\/?$/, "")];
+  }
+
+  if (Platform.OS === "android") {
+    return ["http://10.0.2.2:3000/api", "http://localhost:3000/api", "http://127.0.0.1:3000/api"];
+  }
+
+  return ["http://localhost:3000/api", "http://127.0.0.1:3000/api"];
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs.");
       return;
     }
-    // TODO: call backend API for authentication
-    router.replace("/home");
+
+    const baseUrls = getApiBaseUrls();
+
+    try {
+      setLoading(true);
+
+      for (const baseUrl of baseUrls) {
+        try {
+          const response = await fetch(`${baseUrl}/auth/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+          });
+
+          const data = await response.json() as { userId?: string; username?: string; message?: string };
+
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 400) {
+              Alert.alert("Connexion impossible", data.message ?? "Identifiants invalides.");
+              return;
+            }
+
+            continue;
+          }
+
+          if (!data.userId) {
+            Alert.alert("Erreur", "Réponse login invalide.");
+            return;
+          }
+
+          router.replace({
+            pathname: "/home",
+            params: {
+              userId: data.userId,
+              username: data.username ?? "",
+            },
+          });
+          return;
+        } catch {
+          continue;
+        }
+      }
+
+      Alert.alert("Erreur", "Backend indisponible. Vérifiez que l'API est lancée.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,9 +124,17 @@ export default function LoginScreen() {
             onChangeText={setPassword}
           />
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
             <View style={styles.buttonGloss} />
-            <Text style={styles.buttonText}>Accéder au casino</Text>
+            {loading ? (
+              <ActivityIndicator color="#141824" />
+            ) : (
+              <Text style={styles.buttonText}>Accéder au casino</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -137,6 +211,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
     overflow: "hidden",
+  },
+  buttonDisabled: {
+    opacity: 0.8,
   },
   buttonGloss: {
     position: "absolute",

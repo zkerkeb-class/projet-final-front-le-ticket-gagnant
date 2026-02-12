@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -10,6 +11,7 @@ import {
     Text,
     TextInput,
     View,
+    useWindowDimensions,
 } from "react-native";
 
 import Card from "../components/Card";
@@ -45,7 +47,7 @@ type BlackjackApiState = {
 };
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const DEMO_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
+const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 const REQUEST_TIMEOUT_MS = 10000;
 
 const statusText: Record<Exclude<BlackjackStatus, "ACTIVE">, string> = {
@@ -83,6 +85,12 @@ const getApiBaseUrls = (): string[] => {
 };
 
 export default function BlackjackScreen() {
+  const params = useLocalSearchParams<{ userId?: string | string[] }>();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 980;
+  const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
+
   const [betInput, setBetInput] = useState("50");
   const [gameState, setGameState] = useState<BlackjackApiState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,9 +136,7 @@ export default function BlackjackScreen() {
       }
     }
 
-    throw new Error(
-      `${lastError?.message ?? "Impossible de contacter l'API."} URL(s) testée(s): ${baseUrls.join(", ")}`,
-    );
+    throw new Error(`${lastError?.message ?? "Impossible de contacter l'API."} URL(s) testée(s): ${baseUrls.join(", ")}`);
   };
 
   const handleStart = async () => {
@@ -146,7 +152,7 @@ export default function BlackjackScreen() {
       setErrorMessage(null);
       setLoading(true);
       const nextState = await apiCall("/start", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount,
       });
       setGameState(nextState);
@@ -167,53 +173,7 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/hit", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
-        sessionId: gameState.sessionId,
-      });
-      setGameState(nextState);
-
-      if (nextState.status !== "ACTIVE") {
-        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
-      }
-    } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSplit = async () => {
-    if (!gameState?.sessionId) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const nextState = await apiCall("/split", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
-        sessionId: gameState.sessionId,
-      });
-      setGameState(nextState);
-
-      if (nextState.status !== "ACTIVE") {
-        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
-      }
-    } catch (error) {
-      Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDouble = async () => {
-    if (!gameState?.sessionId) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const nextState = await apiCall("/double", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -236,11 +196,57 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/stand", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
       Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
+    } catch (error) {
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSplit = async () => {
+    if (!gameState?.sessionId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const nextState = await apiCall("/split", {
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+        sessionId: gameState.sessionId,
+      });
+      setGameState(nextState);
+
+      if (nextState.status !== "ACTIVE") {
+        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
+      }
+    } catch (error) {
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDouble = async () => {
+    if (!gameState?.sessionId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const nextState = await apiCall("/double", {
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+        sessionId: gameState.sessionId,
+      });
+      setGameState(nextState);
+
+      if (nextState.status !== "ACTIVE") {
+        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
+      }
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
     } finally {
@@ -253,126 +259,204 @@ export default function BlackjackScreen() {
     setErrorMessage(null);
   };
 
+  const quickHalfBet = () => {
+    const amount = parseBetAmount(betInput);
+    if (!Number.isFinite(amount)) {
+      return;
+    }
+
+    setBetInput(Math.max(1, amount / 2).toFixed(2).replace(".", ","));
+  };
+
+  const quickDoubleBet = () => {
+    const amount = parseBetAmount(betInput);
+    if (!Number.isFinite(amount)) {
+      return;
+    }
+
+    setBetInput((amount * 2).toFixed(2).replace(".", ","));
+  };
+
   const playerHands = gameState?.playerHands ?? (gameState ? [gameState.playerHand] : []);
   const playerScores = gameState?.playerScores ?? (gameState ? [gameState.playerScore] : []);
   const activeHandIndex = typeof gameState?.activeHandIndex === "number" ? gameState.activeHandIndex : 0;
 
   const availableActions = gameState?.availableActions ?? {
-    hit: isActiveGame,
-    stand: isActiveGame,
+    hit: Boolean(isActiveGame),
+    stand: Boolean(isActiveGame),
     split: false,
     double: false,
   };
 
+  const renderActionTile = (
+    label: string,
+    icon: string,
+    onPress: () => void,
+    enabled: boolean,
+    accentColor: string,
+  ) => (
+    <Pressable
+      style={[styles.actionTile, !enabled && styles.actionTileDisabled]}
+      onPress={onPress}
+      disabled={!enabled}
+    >
+      <Text style={styles.actionLabel}>{label}</Text>
+      <Text style={[styles.actionIcon, { color: accentColor }]}>{icon}</Text>
+    </Pressable>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.headerCard}>
-          <Text style={styles.title}>🃏 Blackjack</Text>
-          <Text style={styles.subtitle}>Table Premium</Text>
-        </View>
-
-        {!gameState && (
-          <View style={styles.betBox}>
-            <Text style={styles.sectionTitle}>Commencer une partie</Text>
-            <Text style={styles.hintText}>Choisissez votre mise puis lancez la donne.</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={betInput}
-              onChangeText={(value) => {
-                setBetInput(value);
-                if (errorMessage) {
-                  setErrorMessage(null);
-                }
-              }}
-              placeholder="Montant"
-              placeholderTextColor="#999"
-            />
-
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-
-            <Pressable style={[styles.primaryButton, !canStart && styles.disabledButton]} onPress={handleStart} disabled={!canStart}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>JOUER</Text>}
-            </Pressable>
-          </View>
-        )}
-
-        {gameState && (
-          <View style={styles.gameArea}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoPill}>
-                <Text style={styles.infoLabel}>Solde</Text>
-                <Text style={styles.infoValue}>{gameState.chipBalance.toFixed(2)} jetons</Text>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={[styles.layout, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
+            <View style={styles.segmentedControl}>
+              <View style={[styles.segmentItem, styles.segmentActive]}>
+                <Text style={[styles.segmentText, styles.segmentTextActive]}>Standard</Text>
               </View>
-              <View style={styles.infoPill}>
-                <Text style={styles.infoLabel}>Mise totale</Text>
-                <Text style={styles.infoValue}>{gameState.betAmount.toFixed(2)} jetons</Text>
+              <View style={styles.segmentItem}>
+                <Text style={styles.segmentText}>Mise secondaire</Text>
               </View>
             </View>
 
-            {gameState.mode === "LOCAL_FALLBACK" ? (
-              <View style={styles.localModeBadge}>
-                <Text style={styles.localModeText}>Mode local</Text>
+            <View style={styles.betPanel}>
+              <View style={styles.betHeaderRow}>
+                <Text style={styles.betTitle}>Montant du pari</Text>
+                <Text style={styles.betMeta}>0,00000000 SOL</Text>
               </View>
-            ) : null}
 
-            <View style={styles.zone}>
-              <Text style={styles.sectionTitle}>Croupier</Text>
-              <View style={styles.cardsRow}>
-                {gameState.dealerHand.map((card, index) => (
-                  <Card key={`${card.suit}-${card.value}-${index}`} value={card.value} suit={card.suit} />
-                ))}
+              <View style={styles.betInputWrap}>
+                <View style={styles.euroBadge}>
+                  <Text style={styles.euroBadgeText}>€</Text>
+                </View>
+
+                <TextInput
+                  style={styles.betInput}
+                  keyboardType="numeric"
+                  value={betInput}
+                  onChangeText={(value) => {
+                    setBetInput(value);
+                    if (errorMessage) {
+                      setErrorMessage(null);
+                    }
+                  }}
+                  placeholder="0,00"
+                  placeholderTextColor="#7f8899"
+                />
+
+                <Pressable style={styles.quickButton} onPress={quickHalfBet}>
+                  <Text style={styles.quickButtonText}>½</Text>
+                </Pressable>
+                <Pressable style={styles.quickButton} onPress={quickDoubleBet}>
+                  <Text style={styles.quickButtonText}>2x</Text>
+                </Pressable>
               </View>
-              <Text style={styles.score}>Score: {gameState.dealerScore ?? "?"}</Text>
             </View>
 
-            <View style={styles.zone}>
-              <Text style={styles.sectionTitle}>Joueur</Text>
-              <View style={styles.handsStack}>
-                {playerHands.map((hand, handIndex) => (
-                  <View key={`hand-${handIndex}`} style={[styles.handBox, handIndex === activeHandIndex && isActiveGame ? styles.activeHandBox : null]}>
-                    <View style={styles.handHeaderRow}>
-                      <Text style={styles.handTitle}>Main {handIndex + 1}</Text>
-                      {handIndex === activeHandIndex && isActiveGame ? <Text style={styles.activeTag}>ACTIVE</Text> : null}
-                    </View>
-                    <View style={styles.cardsRow}>
-                      {hand.map((card, cardIndex) => (
-                        <Card key={`${card.suit}-${card.value}-${handIndex}-${cardIndex}`} value={card.value} suit={card.suit} />
-                      ))}
-                    </View>
-                    <Text style={styles.score}>Score: {playerScores[handIndex] ?? 0}</Text>
-                  </View>
-                ))}
-              </View>
+            {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+
+            <View style={styles.actionsGrid}>
+              {renderActionTile("Piocher", "↳", handleHit, isActiveGame && !loading && availableActions.hit, "#34d399")}
+              {renderActionTile("Rester", "✋", handleStand, isActiveGame && !loading && availableActions.stand, "#f87171")}
+              {renderActionTile("Spliter", "↱", handleSplit, isActiveGame && !loading && availableActions.split, "#60a5fa")}
+              {renderActionTile("Doubler", "⧉", handleDouble, isActiveGame && !loading && availableActions.double, "#facc15")}
             </View>
 
-            {isActiveGame ? (
-              <View style={styles.actionsWrap}>
-                <Pressable style={[styles.actionButton, styles.hitButton, (loading || !availableActions.hit) && styles.disabledButton]} onPress={handleHit} disabled={loading || !availableActions.hit}>
-                  <Text style={styles.actionButtonText}>Tirer</Text>
-                </Pressable>
-                <Pressable style={[styles.actionButton, styles.standButton, (loading || !availableActions.stand) && styles.disabledButton]} onPress={handleStand} disabled={loading || !availableActions.stand}>
-                  <Text style={styles.actionButtonText}>Rester</Text>
-                </Pressable>
-                <Pressable style={[styles.actionButton, styles.splitButton, (loading || !availableActions.split) && styles.disabledButton]} onPress={handleSplit} disabled={loading || !availableActions.split}>
-                  <Text style={styles.actionButtonText}>Split</Text>
-                </Pressable>
-                <Pressable style={[styles.actionButton, styles.doubleButton, (loading || !availableActions.double) && styles.disabledButton]} onPress={handleDouble} disabled={loading || !availableActions.double}>
-                  <Text style={styles.actionButtonText}>Doubler</Text>
-                </Pressable>
-              </View>
+            {!gameState ? (
+              <Pressable style={[styles.ctaButton, !canStart && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaButtonText}>Pari</Text>}
+              </Pressable>
+            ) : !isActiveGame ? (
+              <Pressable style={styles.ctaButton} onPress={handleReplay}>
+                <Text style={styles.ctaButtonText}>Rejouer</Text>
+              </Pressable>
             ) : (
-              <View style={styles.endBox}>
-                <Text style={styles.resultTitle}>{statusText[gameState.status as Exclude<BlackjackStatus, "ACTIVE">]}</Text>
-                <Text style={styles.resultText}>Gain net: {gameState.outcome.toFixed(2)} jetons</Text>
-                <Pressable style={styles.primaryButton} onPress={handleReplay}>
-                  <Text style={styles.primaryButtonText}>Rejouer</Text>
-                </Pressable>
+              <View style={styles.inGamePill}>
+                <Text style={styles.inGameText}>Partie en cours</Text>
               </View>
             )}
           </View>
-        )}
+
+          <View style={styles.tableArea}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={styles.tableTitle}>BLACKJACK</Text>
+              {gameState?.mode === "LOCAL_FALLBACK" ? <Text style={styles.localModeChip}>Mode local</Text> : null}
+            </View>
+
+            <View style={styles.rulesStack}>
+              <View style={styles.ruleBadge}>
+                <Text style={styles.ruleText}>BLACKJACK PAYS 3 TO 2</Text>
+              </View>
+              <View style={styles.ruleBadge}>
+                <Text style={styles.ruleText}>INSURANCE PAYS 2 TO 1</Text>
+              </View>
+            </View>
+
+            {!gameState ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Table prête</Text>
+                <Text style={styles.emptyText}>Entrez votre mise et cliquez sur Pari pour démarrer.</Text>
+              </View>
+            ) : (
+              <View style={styles.tableContent}>
+                <View style={styles.infoBar}>
+                  <View>
+                    <Text style={styles.infoLabel}>Solde</Text>
+                    <Text style={styles.infoValue}>{gameState.chipBalance.toFixed(2)} jetons</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.infoLabel}>Mise totale</Text>
+                    <Text style={styles.infoValue}>{gameState.betAmount.toFixed(2)} jetons</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.infoLabel}>Pioche</Text>
+                    <Text style={styles.infoValue}>{gameState.remainingCards} cartes</Text>
+                  </View>
+                </View>
+
+                <View style={styles.handSection}>
+                  <Text style={styles.sectionTitle}>Croupier</Text>
+                  <View style={styles.cardsRow}>
+                    {gameState.dealerHand.map((card, index) => (
+                      <Card key={`${card.suit}-${card.value}-${index}`} value={card.value} suit={card.suit} />
+                    ))}
+                  </View>
+                  <Text style={styles.scoreText}>Score: {gameState.dealerScore ?? "?"}</Text>
+                </View>
+
+                <View style={styles.handSection}>
+                  <Text style={styles.sectionTitle}>Joueur</Text>
+                  <View style={styles.handsStack}>
+                    {playerHands.map((hand, handIndex) => (
+                      <View
+                        key={`hand-${handIndex}`}
+                        style={[styles.playerHandCard, handIndex === activeHandIndex && isActiveGame ? styles.playerHandActive : null]}
+                      >
+                        <View style={styles.playerHandHeader}>
+                          <Text style={styles.playerHandTitle}>Main {handIndex + 1}</Text>
+                          {handIndex === activeHandIndex && isActiveGame ? <Text style={styles.activeTag}>ACTIVE</Text> : null}
+                        </View>
+                        <View style={styles.cardsRow}>
+                          {hand.map((card, cardIndex) => (
+                            <Card key={`${card.suit}-${card.value}-${handIndex}-${cardIndex}`} value={card.value} suit={card.suit} />
+                          ))}
+                        </View>
+                        <Text style={styles.scoreText}>Score: {playerScores[handIndex] ?? 0}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                {!isActiveGame && (
+                  <View style={styles.resultPanel}>
+                    <Text style={styles.resultTitle}>{statusText[gameState.status as Exclude<BlackjackStatus, "ACTIVE">]}</Text>
+                    <Text style={styles.resultText}>Gain net: {gameState.outcome.toFixed(2)} jetons</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -381,219 +465,363 @@ export default function BlackjackScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0d3d2d",
+    backgroundColor: "#090f1b",
   },
-  container: {
+  page: {
     flexGrow: 1,
-    padding: 20,
+    padding: 14,
+  },
+  layout: {
+    flexDirection: "column",
     gap: 14,
   },
-  headerCard: {
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#fff",
-    textAlign: "center",
-    letterSpacing: 0.4,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: "#d0eadf",
-    fontWeight: "600",
-  },
-  betBox: {
-    backgroundColor: "#f6f8f7",
-    borderRadius: 16,
-    padding: 18,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#dfe9e3",
-  },
-  hintText: {
-    color: "#4f5e56",
-    fontSize: 14,
-    marginTop: -4,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#d3d3d3",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    backgroundColor: "#fff",
-  },
-  errorText: {
-    color: "#b71c1c",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  gameArea: {
-    gap: 12,
-  },
-  localModeBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#f6d365",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  localModeText: {
-    color: "#4a3d1b",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  infoRow: {
+  layoutWide: {
     flexDirection: "row",
+    alignItems: "stretch",
+  },
+  sidebar: {
+    backgroundColor: "#0f1727",
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#1c2738",
+  },
+  sidebarWide: {
+    width: 360,
+  },
+  segmentedControl: {
+    backgroundColor: "#171f2e",
+    borderRadius: 10,
+    padding: 6,
+    flexDirection: "row",
+    gap: 6,
+  },
+  segmentItem: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentActive: {
+    backgroundColor: "#363f50",
+  },
+  segmentText: {
+    color: "#a7b1c2",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  segmentTextActive: {
+    color: "#f3f4f6",
+  },
+  betPanel: {
     gap: 10,
   },
-  infoPill: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  betHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  betTitle: {
+    color: "#f3f4f6",
+    fontSize: 28,
+    fontWeight: "700",
+  },
+  betMeta: {
+    color: "#8fa0b8",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  betInputWrap: {
+    backgroundColor: "#1b2434",
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "#263449",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    height: 62,
+    gap: 8,
+  },
+  euroBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#1590d7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  euroBadgeText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  betInput: {
+    flex: 1,
+    color: "#f4f6fa",
+    fontSize: 32,
+    fontWeight: "700",
+    paddingVertical: 0,
+  },
+  quickButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: "#2a3448",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickButtonText: {
+    color: "#d6dbe5",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#f87171",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  actionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  actionTile: {
+    width: "48%",
+    minHeight: 74,
+    borderRadius: 10,
+    backgroundColor: "#161f2f",
+    borderWidth: 1,
+    borderColor: "#202d43",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionTileDisabled: {
+    opacity: 0.42,
+  },
+  actionLabel: {
+    color: "#e5e7eb",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  actionIcon: {
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  ctaButton: {
+    height: 68,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#7a17ff",
+    shadowColor: "#7a17ff",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  ctaButtonDisabled: {
+    opacity: 0.4,
+  },
+  ctaButtonText: {
+    color: "#fff",
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  inGamePill: {
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#16253f",
+    borderWidth: 1,
+    borderColor: "#2c3f63",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inGameText: {
+    color: "#d3e0ff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  tableArea: {
+    flex: 1,
+    backgroundColor: "#070d18",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#182338",
+    padding: 18,
+    minHeight: 560,
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  tableTitle: {
+    color: "#f2f5fa",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  localModeChip: {
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "800",
+    backgroundColor: "#fde68a",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    overflow: "hidden",
+  },
+  rulesStack: {
+    alignSelf: "center",
+    gap: 8,
+    marginBottom: 24,
+  },
+  ruleBadge: {
+    backgroundColor: "#1a2232",
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#2c374d",
+  },
+  ruleText: {
+    color: "#838ea5",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  emptyState: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1e2b42",
+    backgroundColor: "rgba(16, 23, 38, 0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: "#f3f4f6",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  emptyText: {
+    color: "#9ea7bb",
+    fontSize: 16,
+    textAlign: "center",
+    maxWidth: 520,
+  },
+  tableContent: {
+    gap: 14,
+  },
+  infoBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#1f2f4d",
+    backgroundColor: "rgba(17, 26, 42, 0.78)",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
   infoLabel: {
-    color: "#cce5db",
+    color: "#89a0c6",
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
-    marginBottom: 2,
   },
   infoValue: {
-    color: "#ffffff",
+    color: "#f3f4f6",
     fontSize: 16,
     fontWeight: "800",
+    marginTop: 2,
   },
-  zone: {
-    backgroundColor: "#edf2ef",
-    borderRadius: 16,
-    padding: 14,
-    gap: 8,
+  handSection: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d8e3dd",
+    borderColor: "#1d2d48",
+    backgroundColor: "rgba(13, 21, 34, 0.75)",
+    padding: 12,
+    gap: 8,
   },
   sectionTitle: {
+    color: "#f1f5f9",
     fontSize: 18,
-    fontWeight: "700",
-    color: "#1b1b1b",
+    fontWeight: "800",
   },
   cardsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
   },
+  scoreText: {
+    color: "#c8d2e4",
+    fontSize: 15,
+    fontWeight: "700",
+  },
   handsStack: {
     gap: 10,
   },
-  handBox: {
-    backgroundColor: "#fcfcfc",
+  playerHandCard: {
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 12,
+    borderColor: "#2a3c5f",
+    backgroundColor: "rgba(17, 27, 44, 0.65)",
     padding: 10,
     gap: 8,
   },
-  activeHandBox: {
-    borderColor: "#2f8de4",
-    borderWidth: 2,
+  playerHandActive: {
+    borderColor: "#4da2ff",
+    shadowColor: "#4da2ff",
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  handHeaderRow: {
+  playerHandHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-  handTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#1b1b1b",
+  playerHandTitle: {
+    color: "#f4f7fb",
+    fontSize: 16,
+    fontWeight: "800",
   },
   activeTag: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#1f6fbe",
-    backgroundColor: "#d8ecff",
+    color: "#0f172a",
+    backgroundColor: "#67e8f9",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
+    overflow: "hidden",
   },
-  score: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-  },
-  actionsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  actionButton: {
-    minWidth: "47%",
-    height: 48,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hitButton: {
-    backgroundColor: "#2e7d32",
-  },
-  standButton: {
-    backgroundColor: "#37474f",
-  },
-  splitButton: {
-    backgroundColor: "#00897b",
-  },
-  doubleButton: {
-    backgroundColor: "#8e24aa",
-  },
-  actionButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  primaryButton: {
-    height: 50,
-    borderRadius: 10,
-    backgroundColor: "#1d7ee0",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  disabledButton: {
-    opacity: 0.38,
-  },
-  endBox: {
-    backgroundColor: "#f3f7f5",
-    borderRadius: 16,
-    padding: 16,
-    gap: 10,
+  resultPanel: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#d8e3dd",
+    borderColor: "#2a3d60",
+    backgroundColor: "rgba(21, 30, 48, 0.85)",
+    padding: 14,
+    gap: 8,
   },
   resultTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1d2f27",
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "900",
   },
   resultText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#34473f",
+    color: "#c6d0e3",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
