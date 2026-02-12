@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 
 type ChipBalanceBadgeProps = {
   userId?: string;
@@ -24,48 +24,70 @@ const getApiBaseUrls = (): string[] => {
 export default function ChipBalanceBadge({ userId, amount, compact = false }: ChipBalanceBadgeProps) {
   const [remoteAmount, setRemoteAmount] = useState<number | null>(null);
 
+  const loadBalance = useCallback(async () => {
+    if (typeof amount === "number") {
+      return;
+    }
+
+    const baseUrls = getApiBaseUrls();
+
+    for (const baseUrl of baseUrls) {
+      try {
+        const query = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+        const response = await fetch(`${baseUrl}/users/balance${query}`);
+        if (!response.ok) {
+          continue;
+        }
+
+        const data = await response.json() as { chipBalance?: number };
+        if (typeof data.chipBalance === "number") {
+          setRemoteAmount(data.chipBalance);
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    setRemoteAmount(null);
+  }, [amount, userId]);
+
   useEffect(() => {
     if (typeof amount === "number") {
       setRemoteAmount(null);
       return;
     }
 
-    let cancelled = false;
-
-    const loadBalance = async () => {
-      const baseUrls = getApiBaseUrls();
-
-      for (const baseUrl of baseUrls) {
-        try {
-          const query = userId ? `?userId=${encodeURIComponent(userId)}` : "";
-          const response = await fetch(`${baseUrl}/users/balance${query}`);
-          if (!response.ok) {
-            continue;
-          }
-
-          const data = await response.json() as { chipBalance?: number };
-          if (typeof data.chipBalance === "number") {
-            if (!cancelled) {
-              setRemoteAmount(data.chipBalance);
-            }
-            return;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!cancelled) {
-        setRemoteAmount(null);
-      }
-    };
-
     loadBalance();
 
-    return () => {
-      cancelled = true;
+    const interval = setInterval(() => {
+      loadBalance();
+    }, 2500);
+
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        loadBalance();
+      }
+    });
+
+    const visibilityHandler = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadBalance();
+      }
     };
-  }, [amount, userId]);
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", visibilityHandler);
+    }
+
+    return () => {
+      clearInterval(interval);
+      appStateSubscription.remove();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", visibilityHandler);
+      }
+    };
+  }, [amount, loadBalance]);
 
   const displayAmount = useMemo(() => {
     const resolved = typeof amount === "number" ? amount : remoteAmount;

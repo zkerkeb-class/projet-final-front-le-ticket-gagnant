@@ -1,11 +1,9 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
-const BLACKJACK_API_URL = process.env.EXPO_PUBLIC_API_URL;
 const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 
 const withAlpha = (hex: string, alpha: number): string => {
@@ -25,22 +23,9 @@ const withAlpha = (hex: string, alpha: number): string => {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 };
 
-const getApiBaseUrls = (): string[] => {
-  if (BLACKJACK_API_URL) {
-    return [BLACKJACK_API_URL.replace(/\/games\/blackjack\/?$/, "")];
-  }
-
-  if (Platform.OS === "android") {
-    return ["http://10.0.2.2:3000/api", "http://localhost:3000/api", "http://127.0.0.1:3000/api"];
-  }
-
-  return ["http://localhost:3000/api", "http://127.0.0.1:3000/api"];
-};
-
 export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string | string[]; username?: string | string[] }>();
-  const [balanceText, setBalanceText] = useState("Solde : ...");
 
   const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
   const username = Array.isArray(params.username) ? params.username[0] : params.username;
@@ -58,36 +43,6 @@ export default function HomeScreen() {
       },
     });
   };
-
-  const loadBalance = useCallback(async () => {
-    const baseUrls = getApiBaseUrls();
-
-    for (const baseUrl of baseUrls) {
-      try {
-        const query = resolvedUserId ? `?userId=${encodeURIComponent(resolvedUserId)}` : "";
-        const response = await fetch(`${baseUrl}/users/balance${query}`);
-        if (!response.ok) {
-          continue;
-        }
-
-        const data = await response.json() as { chipBalance?: number };
-        if (typeof data.chipBalance === "number") {
-          setBalanceText(`Solde : ${data.chipBalance.toFixed(2)} jetons`);
-          return;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    setBalanceText("Solde : indisponible");
-  }, [resolvedUserId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadBalance();
-    }, [loadBalance]),
-  );
 
   const handleOpenRoulette = () => {
     router.push({
@@ -136,7 +91,6 @@ export default function HomeScreen() {
 
       <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
       {username ? <Text style={styles.subtitle}>Connecté en tant que {username}</Text> : null}
-      <Text style={styles.balance}>{balanceText}</Text>
 
       <View style={styles.gamesContainer}>
         <Text style={styles.sectionTitle}>Jeux disponibles</Text>
@@ -287,12 +241,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: casinoTheme.colors.textMuted,
     marginBottom: 8,
-  },
-  balance: {
-    fontSize: 26,
-    color: casinoTheme.colors.green,
-    fontWeight: "900",
-    marginTop: 2,
   },
   gamesContainer: {
     width: "100%",
