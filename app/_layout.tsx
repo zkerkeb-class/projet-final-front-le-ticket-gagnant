@@ -62,36 +62,32 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? professionalDarkTheme : professionalDarkTheme}>
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: casinoTheme.colors.bgAlt },
+          headerTintColor: casinoTheme.colors.text,
+          headerTitleStyle: { fontWeight: "800" },
+          headerShadowVisible: false,
+          headerBackTitleVisible: false,
+        }}
+      >
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen
           name="home"
           options={{
             title: "Casino Premium",
-            headerStyle: { backgroundColor: casinoTheme.colors.bgAlt },
-            headerTintColor: casinoTheme.colors.text,
-            headerTitleStyle: { fontWeight: "800" },
-            headerShadowVisible: false,
           }}
         />
         <Stack.Screen
           name="blackjack"
           options={{
             title: "Blackjack",
-            headerStyle: { backgroundColor: casinoTheme.colors.bgAlt },
-            headerTintColor: casinoTheme.colors.text,
-            headerTitleStyle: { fontWeight: "800" },
-            headerShadowVisible: false,
           }}
         />
         <Stack.Screen
           name="roulette"
           options={{
             title: "Roulette Électronique",
-            headerStyle: { backgroundColor: casinoTheme.colors.bgAlt },
-            headerTintColor: casinoTheme.colors.text,
-            headerTitleStyle: { fontWeight: "800" },
-            headerShadowVisible: false,
           }}
         />
       </Stack>

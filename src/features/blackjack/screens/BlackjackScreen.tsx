@@ -1,8 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Animated,
+    Easing,
     Platform,
     Pressable,
     SafeAreaView,
@@ -14,7 +16,9 @@ import {
     useWindowDimensions,
 } from "react-native";
 
+import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import Card from "../components/Card";
+import useSequentialDeal from "../hooks/useSequentialDeal";
 
 type CardType = {
   value: "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "A";
@@ -49,11 +53,39 @@ type BlackjackApiState = {
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 const REQUEST_TIMEOUT_MS = 10000;
+const RESULT_PANEL_DELAY_MS = 420;
 
 const statusText: Record<Exclude<BlackjackStatus, "ACTIVE">, string> = {
   PLAYER_WON: "Vous avez gagné !",
   DEALER_WON: "Le croupier a gagné.",
   PUSH: "Égalité (Push).",
+};
+
+const calculateBlackjackScore = (hand: CardType[]): number => {
+  let score = 0;
+  let aces = 0;
+
+  hand.forEach((card) => {
+    if (card.value === "A") {
+      aces += 1;
+      score += 11;
+      return;
+    }
+
+    if (["K", "Q", "J"].includes(card.value)) {
+      score += 10;
+      return;
+    }
+
+    score += Number(card.value);
+  });
+
+  while (score > 21 && aces > 0) {
+    score -= 10;
+    aces -= 1;
+  }
+
+  return score;
 };
 
 const parseBetAmount = (value: string): number => {
@@ -95,6 +127,7 @@ export default function BlackjackScreen() {
   const [gameState, setGameState] = useState<BlackjackApiState | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showResultPanel, setShowResultPanel] = useState(false);
 
   const isActiveGame = gameState?.status === "ACTIVE";
 
@@ -281,6 +314,131 @@ export default function BlackjackScreen() {
   const playerScores = gameState?.playerScores ?? (gameState ? [gameState.playerScore] : []);
   const activeHandIndex = typeof gameState?.activeHandIndex === "number" ? gameState.activeHandIndex : 0;
 
+  const { visibleDealerCount, visiblePlayerCounts, dealTick } = useSequentialDeal(
+    gameState?.sessionId,
+    gameState?.dealerHand ?? [],
+    playerHands,
+  );
+
+  const totalVisiblePlayerCards = visiblePlayerCounts.reduce((sum, count) => sum + count, 0);
+  const totalPlayerCards = playerHands.reduce((sum, hand) => sum + hand.length, 0);
+  const totalVisibleCards = visibleDealerCount + totalVisiblePlayerCards;
+  const totalCards = (gameState?.dealerHand.length ?? 0) + totalPlayerCards;
+  const isDealing = Boolean(gameState) && totalVisibleCards < totalCards;
+  const isDealerRevealing = Boolean(gameState) && !isActiveGame && visibleDealerCount < (gameState?.dealerHand.length ?? 0);
+  const isPlayerTurn = isActiveGame && !isDealing;
+
+  useEffect(() => {
+    if (!gameState || isActiveGame || isDealing) {
+      setShowResultPanel(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setShowResultPanel(true);
+    }, RESULT_PANEL_DELAY_MS);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [gameState, isActiveGame, isDealing]);
+
+  const deckPulse = useRef(new Animated.Value(0)).current;
+  const deckKick = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isDealing) {
+      deckPulse.stopAnimation();
+      deckPulse.setValue(0);
+      return;
+    }
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(deckPulse, {
+          toValue: 1,
+          duration: 320,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(deckPulse, {
+          toValue: 0,
+          duration: 320,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    pulseLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+    };
+  }, [deckPulse, isDealing]);
+
+  useEffect(() => {
+    if (!isDealing || dealTick === 0) {
+      return;
+    }
+
+    Animated.sequence([
+      Animated.timing(deckKick, {
+        toValue: 1,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(deckKick, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [dealTick, deckKick, isDealing]);
+
+  const deckPulseStyle = {
+    transform: [
+      { translateY: -62 },
+      {
+        translateX: deckKick.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -7],
+        }),
+      },
+      {
+        rotate: deckKick.interpolate({
+          inputRange: [0, 1],
+          outputRange: ["0deg", "-4deg"],
+        }),
+      },
+      {
+        scale: deckPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.06],
+        }),
+      },
+    ],
+    opacity: deckPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0.9],
+    }),
+  };
+
+  const visibleDealerScore = useMemo(() => {
+    if (!gameState) {
+      return null;
+    }
+
+    const visibleDealerHand = gameState.dealerHand.slice(0, visibleDealerCount);
+    if (visibleDealerHand.length === 0) {
+      return null;
+    }
+
+    return calculateBlackjackScore(visibleDealerHand);
+  }, [gameState, visibleDealerCount]);
+
   const availableActions = gameState?.availableActions ?? {
     hit: Boolean(isActiveGame),
     stand: Boolean(isActiveGame),
@@ -356,10 +514,10 @@ export default function BlackjackScreen() {
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
             <View style={styles.actionsGrid}>
-              {renderActionTile("Piocher", "↳", handleHit, isActiveGame && !loading && availableActions.hit, "#34d399")}
-              {renderActionTile("Rester", "✋", handleStand, isActiveGame && !loading && availableActions.stand, "#f87171")}
-              {renderActionTile("Spliter", "↱", handleSplit, isActiveGame && !loading && availableActions.split, "#60a5fa")}
-              {renderActionTile("Doubler", "⧉", handleDouble, isActiveGame && !loading && availableActions.double, "#facc15")}
+              {renderActionTile("Piocher", "↳", handleHit, isPlayerTurn && !loading && availableActions.hit, "#34d399")}
+              {renderActionTile("Rester", "✋", handleStand, isPlayerTurn && !loading && availableActions.stand, "#f87171")}
+              {renderActionTile("Splitter", "↱", handleSplit, isPlayerTurn && !loading && availableActions.split, "#60a5fa")}
+              {renderActionTile("Doubler", "⧉", handleDouble, isPlayerTurn && !loading && availableActions.double, "#facc15")}
             </View>
 
             {!gameState ? (
@@ -372,7 +530,7 @@ export default function BlackjackScreen() {
               </Pressable>
             ) : (
               <View style={styles.inGamePill}>
-                <Text style={styles.inGameText}>Partie en cours</Text>
+                <Text style={styles.inGameText}>{isDealing ? "Distribution en cours..." : "Partie en cours"}</Text>
               </View>
             )}
           </View>
@@ -380,15 +538,9 @@ export default function BlackjackScreen() {
           <View style={styles.tableArea}>
             <View style={styles.tableHeaderRow}>
               <Text style={styles.tableTitle}>BLACKJACK</Text>
-              {gameState?.mode === "LOCAL_FALLBACK" ? <Text style={styles.localModeChip}>Mode local</Text> : null}
-            </View>
-
-            <View style={styles.rulesStack}>
-              <View style={styles.ruleBadge}>
-                <Text style={styles.ruleText}>BLACKJACK PAYS 3 TO 2</Text>
-              </View>
-              <View style={styles.ruleBadge}>
-                <Text style={styles.ruleText}>INSURANCE PAYS 2 TO 1</Text>
+              <View style={styles.tableHeaderRight}>
+                <ChipBalanceBadge userId={resolvedUserId} amount={gameState?.chipBalance} compact />
+                {gameState?.mode === "LOCAL_FALLBACK" ? <Text style={styles.localModeChip}>Mode local</Text> : null}
               </View>
             </View>
 
@@ -401,10 +553,6 @@ export default function BlackjackScreen() {
               <View style={styles.tableContent}>
                 <View style={styles.infoBar}>
                   <View>
-                    <Text style={styles.infoLabel}>Solde</Text>
-                    <Text style={styles.infoValue}>{gameState.chipBalance.toFixed(2)} jetons</Text>
-                  </View>
-                  <View>
                     <Text style={styles.infoLabel}>Mise totale</Text>
                     <Text style={styles.infoValue}>{gameState.betAmount.toFixed(2)} jetons</Text>
                   </View>
@@ -414,19 +562,52 @@ export default function BlackjackScreen() {
                   </View>
                 </View>
 
-                <View style={styles.handSection}>
-                  <Text style={styles.sectionTitle}>Croupier</Text>
-                  <View style={styles.cardsRow}>
-                    {gameState.dealerHand.map((card, index) => (
-                      <Card key={`${card.suit}-${card.value}-${index}`} value={card.value} suit={card.suit} />
-                    ))}
-                  </View>
-                  <Text style={styles.scoreText}>Score: {gameState.dealerScore ?? "?"}</Text>
+                <View style={styles.phaseBanner}>
+                  <Text style={styles.phaseBannerText}>
+                    {isDealing
+                      ? "Le croupier distribue les cartes..."
+                      : (isActiveGame ? "À vous de jouer" : (isDealerRevealing ? "Tour du croupier" : "Main terminée"))}
+                  </Text>
                 </View>
 
-                <View style={styles.handSection}>
-                  <Text style={styles.sectionTitle}>Joueur</Text>
-                  <View style={styles.handsStack}>
+                <View style={styles.playMat}>
+                  <Animated.View style={[styles.virtualDeckWrap, deckPulseStyle]}>
+                    <View style={styles.virtualDeckShadowA} />
+                    <View style={styles.virtualDeckShadowB} />
+                    <View style={styles.virtualDeckTop}>
+                      <Text style={styles.virtualDeckTopText}>PAQUET</Text>
+                    </View>
+                    <Text style={styles.deckCountText}>{gameState.remainingCards}</Text>
+                  </Animated.View>
+
+                  <View style={[styles.dealerZone, isDealerRevealing ? styles.dealerZoneFocus : null]}>
+                    <Text style={styles.sectionTitle}>Croupier</Text>
+                    {!!isDealerRevealing && <Text style={styles.turnTag}>Tire...</Text>}
+                    <View style={styles.centeredCardsRow}>
+                      {gameState.dealerHand.slice(0, visibleDealerCount).map((card, index) => (
+                        <View
+                          key={`${card.suit}-${card.value}-${index}`}
+                          style={[
+                            styles.stackedCard,
+                            styles.dealerCard,
+                            index === 0 ? styles.firstStackedCard : null,
+                            {
+                              zIndex: index + 1,
+                              transform: [{ rotate: `${-6 + index * 3}deg` }],
+                            },
+                          ]}
+                        >
+                          <Card value={card.value} suit={card.suit} entryLane="dealer" />
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={styles.scoreText}>Score: {visibleDealerScore ?? "?"}</Text>
+                  </View>
+
+                  <View style={[styles.playerZone, isPlayerTurn ? styles.playerZoneFocus : null]}>
+                    <Text style={styles.sectionTitle}>Joueur</Text>
+                    {isPlayerTurn ? <Text style={styles.turnTag}>Votre tour</Text> : null}
+                    <View style={styles.handsStackCentered}>
                     {playerHands.map((hand, handIndex) => (
                       <View
                         key={`hand-${handIndex}`}
@@ -434,23 +615,43 @@ export default function BlackjackScreen() {
                       >
                         <View style={styles.playerHandHeader}>
                           <Text style={styles.playerHandTitle}>Main {handIndex + 1}</Text>
-                          {handIndex === activeHandIndex && isActiveGame ? <Text style={styles.activeTag}>ACTIVE</Text> : null}
+                          <View style={styles.handBadgesRow}>
+                            {handIndex === activeHandIndex && isActiveGame ? <Text style={styles.activeTag}>ACTIVE</Text> : null}
+                            {(playerScores[handIndex] ?? 0) === 21 ? <Text style={styles.blackjackTag}>BLACKJACK</Text> : null}
+                            {(playerScores[handIndex] ?? 0) > 21 ? <Text style={styles.bustTag}>BUST</Text> : null}
+                          </View>
                         </View>
-                        <View style={styles.cardsRow}>
-                          {hand.map((card, cardIndex) => (
-                            <Card key={`${card.suit}-${card.value}-${handIndex}-${cardIndex}`} value={card.value} suit={card.suit} />
+                        <View style={styles.centeredCardsRow}>
+                          {hand.slice(0, visiblePlayerCounts[handIndex] ?? 0).map((card, cardIndex) => (
+                            <View
+                              key={`${card.suit}-${card.value}-${handIndex}-${cardIndex}`}
+                              style={[
+                                styles.stackedCard,
+                                styles.playerCard,
+                                cardIndex === 0 ? styles.firstStackedCard : null,
+                                {
+                                  zIndex: cardIndex + 1,
+                                  transform: [{ rotate: `${6 - cardIndex * 3}deg` }],
+                                },
+                              ]}
+                            >
+                              <Card value={card.value} suit={card.suit} entryLane="player" />
+                            </View>
                           ))}
                         </View>
                         <Text style={styles.scoreText}>Score: {playerScores[handIndex] ?? 0}</Text>
                       </View>
                     ))}
+                    </View>
                   </View>
                 </View>
 
-                {!isActiveGame && (
+                {showResultPanel && (
                   <View style={styles.resultPanel}>
                     <Text style={styles.resultTitle}>{statusText[gameState.status as Exclude<BlackjackStatus, "ACTIVE">]}</Text>
-                    <Text style={styles.resultText}>Gain net: {gameState.outcome.toFixed(2)} jetons</Text>
+                    <Text style={[styles.resultText, gameState.outcome > 0 ? styles.resultWin : gameState.outcome < 0 ? styles.resultLoss : null]}>
+                      Gain net: {gameState.outcome.toFixed(2)} jetons
+                    </Text>
                   </View>
                 )}
               </View>
@@ -661,6 +862,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
+  tableHeaderRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
   tableTitle: {
     color: "#f2f5fa",
     fontSize: 30,
@@ -721,7 +926,21 @@ const styles = StyleSheet.create({
     maxWidth: 520,
   },
   tableContent: {
-    gap: 14,
+    gap: 12,
+  },
+  phaseBanner: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#26395b",
+    backgroundColor: "rgba(18, 29, 46, 0.78)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: "center",
+  },
+  phaseBannerText: {
+    color: "#dbe5f5",
+    fontSize: 14,
+    fontWeight: "700",
   },
   infoBar: {
     flexDirection: "row",
@@ -745,51 +964,163 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 2,
   },
-  handSection: {
-    borderRadius: 12,
+  playMat: {
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#1d2d48",
-    backgroundColor: "rgba(13, 21, 34, 0.75)",
-    padding: 12,
+    backgroundColor: "rgba(10, 19, 32, 0.86)",
+    minHeight: 420,
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+    justifyContent: "space-between",
+    position: "relative",
+    overflow: "hidden",
+  },
+  virtualDeckWrap: {
+    position: "absolute",
+    right: 24,
+    top: "50%",
+    width: 82,
+    height: 126,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  virtualDeckShadowA: {
+    position: "absolute",
+    width: 68,
+    height: 100,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#3a4c6e",
+    backgroundColor: "#111a2a",
+    transform: [{ translateX: -6 }, { translateY: -6 }],
+  },
+  virtualDeckShadowB: {
+    position: "absolute",
+    width: 68,
+    height: 100,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#3a4c6e",
+    backgroundColor: "#111a2a",
+    transform: [{ translateX: -3 }, { translateY: -3 }],
+  },
+  virtualDeckTop: {
+    width: 68,
+    height: 100,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#48638d",
+    backgroundColor: "#15243a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  virtualDeckTopText: {
+    color: "#d7e3ff",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  deckCountText: {
+    marginTop: 6,
+    color: "#99accd",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  dealerZone: {
+    alignItems: "center",
+    paddingTop: 6,
     gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  playerZone: {
+    alignItems: "center",
+    paddingBottom: 2,
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  dealerZoneFocus: {
+    borderWidth: 1,
+    borderColor: "rgba(126, 176, 255, 0.45)",
+    backgroundColor: "transparent",
+  },
+  playerZoneFocus: {
+    borderWidth: 1,
+    borderColor: "rgba(126, 176, 255, 0.45)",
+    backgroundColor: "transparent",
   },
   sectionTitle: {
     color: "#f1f5f9",
     fontSize: 18,
     fontWeight: "800",
   },
-  cardsRow: {
+  turnTag: {
+    color: "#9ec8ff",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  centeredCardsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 112,
+  },
+  stackedCard: {
+    marginLeft: -46,
+  },
+  firstStackedCard: {
+    marginLeft: 0,
+  },
+  dealerCard: {
+    marginTop: 8,
+  },
+  playerCard: {
+    marginTop: -8,
   },
   scoreText: {
     color: "#c8d2e4",
     fontSize: 15,
     fontWeight: "700",
+    textAlign: "center",
   },
-  handsStack: {
+  handsStackCentered: {
     gap: 10,
+    alignItems: "center",
+    width: "100%",
   },
   playerHandCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a3c5f",
-    backgroundColor: "rgba(17, 27, 44, 0.65)",
-    padding: 10,
+    borderRadius: 0,
+    borderWidth: 0,
+    borderColor: "transparent",
+    backgroundColor: "transparent",
+    padding: 0,
     gap: 8,
+    minWidth: 260,
+    alignItems: "center",
   },
   playerHandActive: {
-    borderColor: "#4da2ff",
-    shadowColor: "#4da2ff",
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    borderColor: "transparent",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   playerHandHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 8,
+    width: "100%",
+  },
+  handBadgesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   playerHandTitle: {
     color: "#f4f7fb",
@@ -799,8 +1130,28 @@ const styles = StyleSheet.create({
   activeTag: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#0f172a",
-    backgroundColor: "#67e8f9",
+    color: "#dbeafe",
+    backgroundColor: "#1e3a5f",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
+  blackjackTag: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#052e16",
+    backgroundColor: "#86efac",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
+  bustTag: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#450a0a",
+    backgroundColor: "#fca5a5",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -823,5 +1174,11 @@ const styles = StyleSheet.create({
     color: "#c6d0e3",
     fontSize: 16,
     fontWeight: "700",
+  },
+  resultWin: {
+    color: "#86efac",
+  },
+  resultLoss: {
+    color: "#fca5a5",
   },
 });

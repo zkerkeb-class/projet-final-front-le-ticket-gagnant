@@ -2,6 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ImageBackground, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import { casinoTheme } from "./casinoTheme";
 
 const BLACKJACK_API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -72,13 +73,22 @@ export default function HomeScreen() {
   );
 
   const handleOpenRoulette = () => {
-    router.push("/roulette");
+    router.push({
+      pathname: "/roulette",
+      params: {
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+      },
+    });
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.backgroundLayerA} />
       <View style={styles.backgroundLayerB} />
+
+      <View style={styles.balanceBadgeWrap}>
+        <ChipBalanceBadge userId={resolvedUserId} />
+      </View>
 
       <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
       {username ? <Text style={styles.subtitle}>Connecté en tant que {username}</Text> : null}
@@ -159,6 +169,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 30,
     position: "relative",
+  },
+  balanceBadgeWrap: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    zIndex: 4,
   },
   backgroundLayerA: {
     ...StyleSheet.absoluteFillObject,

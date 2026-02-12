@@ -1,3 +1,5 @@
+import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
 import { rouletteTheme } from "./assets/theme";
@@ -34,6 +36,9 @@ function NeonButton({
 }
 
 export default function RouletteGame() {
+  const params = useLocalSearchParams<{ userId?: string | string[] }>();
+  const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+
   const {
     bankroll,
     selectedChip,
@@ -96,6 +101,10 @@ export default function RouletteGame() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
       <View style={styles.backgroundLayerA} />
       <View style={styles.backgroundLayerB} />
+
+      <View style={styles.balanceBadgeWrap}>
+        <ChipBalanceBadge userId={routeUserId} amount={bankroll} compact />
+      </View>
 
       <Text style={styles.title}>ROULETTE ÉLECTRONIQUE</Text>
       <Text style={styles.subtitle}>Mode immersive · European Rules</Text>
@@ -186,6 +195,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 24,
     position: "relative",
+  },
+  balanceBadgeWrap: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 5,
   },
   backgroundLayerA: {
     ...StyleSheet.absoluteFillObject,
