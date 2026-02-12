@@ -1,9 +1,8 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ImageBackground, Platform, ScrollView, StyleSheet, TouchableOpacity } from "react-native";
+import { ImageBackground, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { Text, View } from "@/components/Themed";
 import { casinoTheme } from "./casinoTheme";
 
 const BLACKJACK_API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -110,7 +109,7 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.gameCard} onPress={handleGoToBlackjack}>
           <ImageBackground
             source={{
-              uri: "https://images.unsplash.com/photo-1605870445919-838d190e8e1e?auto=format&fit=crop&w=800&q=80",
+              uri: "https://images.unsplash.com/photo-1529480780361-c8cb81eb5735?auto=format&fit=crop&w=1600&q=80",
             }}
             resizeMode="cover"
             imageStyle={styles.gameImageStyle}
@@ -128,7 +127,7 @@ export default function HomeScreen() {
         <TouchableOpacity style={[styles.gameCard, styles.featuredCard]} onPress={handleOpenRoulette}>
           <ImageBackground
             source={{
-              uri: "https://images.unsplash.com/photo-1606167668584-78701c57f13d?auto=format&fit=crop&w=800&q=80",
+              uri: "https://images.pexels.com/photos/3279691/pexels-photo-3279691.jpeg?auto=compress&cs=tinysrgb&w=1600",
             }}
             resizeMode="cover"
             imageStyle={styles.gameImageStyle}
@@ -177,13 +176,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "900",
+    color: casinoTheme.colors.cyan,
+    letterSpacing: 0.6,
     marginTop: 20,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: "#666",
+    color: casinoTheme.colors.textMuted,
     marginBottom: 8,
   },
   balance: {
