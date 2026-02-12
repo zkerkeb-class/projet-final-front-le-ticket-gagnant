@@ -10,6 +10,10 @@ export default function HomeScreen() {
     router.replace("/login");
   };
 
+  const handleGoToBlackjack = () => {
+    router.push("/blackjack");
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
@@ -23,7 +27,7 @@ export default function HomeScreen() {
           <Text style={styles.gameTitle}>Machine à sous</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.gameCard}>
+        <TouchableOpacity style={styles.gameCard} onPress={handleGoToBlackjack}>
           <Text style={styles.gameEmoji}>🃏</Text>
           <Text style={styles.gameTitle}>Blackjack</Text>
         </TouchableOpacity>

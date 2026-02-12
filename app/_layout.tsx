@@ -53,6 +53,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="home" options={{ title: "Accueil" }} />
+        <Stack.Screen name="blackjack" options={{ title: "Blackjack" }} />
       </Stack>
     </ThemeProvider>
   );
