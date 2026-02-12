@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -46,7 +47,7 @@ type BlackjackApiState = {
 };
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const DEMO_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
+const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 const REQUEST_TIMEOUT_MS = 10000;
 
 const statusText: Record<Exclude<BlackjackStatus, "ACTIVE">, string> = {
@@ -84,8 +85,11 @@ const getApiBaseUrls = (): string[] => {
 };
 
 export default function BlackjackScreen() {
+  const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
+  const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
 
   const [betInput, setBetInput] = useState("50");
   const [gameState, setGameState] = useState<BlackjackApiState | null>(null);
@@ -148,7 +152,7 @@ export default function BlackjackScreen() {
       setErrorMessage(null);
       setLoading(true);
       const nextState = await apiCall("/start", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount,
       });
       setGameState(nextState);
@@ -169,7 +173,7 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/hit", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -192,7 +196,7 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/stand", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -212,7 +216,7 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/split", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -235,7 +239,7 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/double", {
-        ...(DEMO_USER_ID ? { userId: DEMO_USER_ID } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
