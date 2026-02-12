@@ -2,7 +2,7 @@ import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
-import { casinoTheme } from './casinoTheme';
+import { casinoTheme } from '@/src/theme/casinoTheme';
 
 export default function NotFoundScreen() {
   return (

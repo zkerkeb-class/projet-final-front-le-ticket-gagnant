@@ -1,19 +1,19 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Easing,
-    Platform,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    useWindowDimensions,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
@@ -128,6 +128,7 @@ export default function BlackjackScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showResultPanel, setShowResultPanel] = useState(false);
+  const shownResultAlertRef = useRef<string | null>(null);
 
   const isActiveGame = gameState?.status === "ACTIVE";
 
@@ -210,10 +211,6 @@ export default function BlackjackScreen() {
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
-
-      if (nextState.status !== "ACTIVE") {
-        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
-      }
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
     } finally {
@@ -233,7 +230,6 @@ export default function BlackjackScreen() {
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
-      Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
     } finally {
@@ -253,10 +249,6 @@ export default function BlackjackScreen() {
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
-
-      if (nextState.status !== "ACTIVE") {
-        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
-      }
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
     } finally {
@@ -276,10 +268,6 @@ export default function BlackjackScreen() {
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
-
-      if (nextState.status !== "ACTIVE") {
-        Alert.alert("Résultat", statusText[nextState.status as Exclude<BlackjackStatus, "ACTIVE">]);
-      }
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Action impossible.");
     } finally {
@@ -311,7 +299,6 @@ export default function BlackjackScreen() {
   };
 
   const playerHands = gameState?.playerHands ?? (gameState ? [gameState.playerHand] : []);
-  const playerScores = gameState?.playerScores ?? (gameState ? [gameState.playerScore] : []);
   const activeHandIndex = typeof gameState?.activeHandIndex === "number" ? gameState.activeHandIndex : 0;
 
   const { visibleDealerCount, visiblePlayerCounts, dealTick } = useSequentialDeal(
@@ -325,8 +312,12 @@ export default function BlackjackScreen() {
   const totalVisibleCards = visibleDealerCount + totalVisiblePlayerCards;
   const totalCards = (gameState?.dealerHand.length ?? 0) + totalPlayerCards;
   const isDealing = Boolean(gameState) && totalVisibleCards < totalCards;
-  const isDealerRevealing = Boolean(gameState) && !isActiveGame && visibleDealerCount < (gameState?.dealerHand.length ?? 0);
+  const hasHiddenPlayerCards = playerHands.some((hand, handIndex) => (visiblePlayerCounts[handIndex] ?? 0) < hand.length);
+  const hasHiddenDealerCards = visibleDealerCount < (gameState?.dealerHand.length ?? 0);
+  const isDealerRevealing = Boolean(gameState) && !isActiveGame && hasHiddenDealerCards && !hasHiddenPlayerCards;
+  const isPlayerRevealing = Boolean(gameState) && !isActiveGame && isDealing && hasHiddenPlayerCards;
   const isPlayerTurn = isActiveGame && !isDealing;
+  const isPlayerZoneHighlighted = isPlayerTurn || isPlayerRevealing;
 
   useEffect(() => {
     if (!gameState || isActiveGame || isDealing) {
@@ -438,6 +429,38 @@ export default function BlackjackScreen() {
 
     return calculateBlackjackScore(visibleDealerHand);
   }, [gameState, visibleDealerCount]);
+
+  const visiblePlayerScores = useMemo(() => {
+    return playerHands.map((hand, handIndex) => {
+      const visibleCount = visiblePlayerCounts[handIndex] ?? 0;
+      const visibleHand = hand.slice(0, visibleCount);
+
+      if (visibleHand.length === 0) {
+        return null;
+      }
+
+      return calculateBlackjackScore(visibleHand);
+    });
+  }, [playerHands, visiblePlayerCounts]);
+
+  useEffect(() => {
+    if (!gameState || gameState.status === "ACTIVE") {
+      shownResultAlertRef.current = null;
+      return;
+    }
+
+    if (isDealing || !showResultPanel) {
+      return;
+    }
+
+    const resultKey = `${gameState.sessionId}:${gameState.status}:${gameState.outcome}`;
+    if (shownResultAlertRef.current === resultKey) {
+      return;
+    }
+
+    shownResultAlertRef.current = resultKey;
+    Alert.alert("Résultat", statusText[gameState.status as Exclude<BlackjackStatus, "ACTIVE">]);
+  }, [gameState, isDealing, showResultPanel]);
 
   const availableActions = gameState?.availableActions ?? {
     hit: Boolean(isActiveGame),
@@ -565,7 +588,7 @@ export default function BlackjackScreen() {
                 <View style={styles.phaseBanner}>
                   <Text style={styles.phaseBannerText}>
                     {isDealing
-                      ? "Le croupier distribue les cartes..."
+                      ? (isPlayerRevealing ? "Votre main se complète..." : "Le croupier distribue les cartes...")
                       : (isActiveGame ? "À vous de jouer" : (isDealerRevealing ? "Tour du croupier" : "Main terminée"))}
                   </Text>
                 </View>
@@ -604,9 +627,9 @@ export default function BlackjackScreen() {
                     <Text style={styles.scoreText}>Score: {visibleDealerScore ?? "?"}</Text>
                   </View>
 
-                  <View style={[styles.playerZone, isPlayerTurn ? styles.playerZoneFocus : null]}>
+                  <View style={[styles.playerZone, isPlayerZoneHighlighted ? styles.playerZoneFocus : null]}>
                     <Text style={styles.sectionTitle}>Joueur</Text>
-                    {isPlayerTurn ? <Text style={styles.turnTag}>Votre tour</Text> : null}
+                    {(isPlayerTurn || isPlayerRevealing) ? <Text style={styles.turnTag}>{isPlayerTurn ? "Votre tour" : "Pioche..."}</Text> : null}
                     <View style={styles.handsStackCentered}>
                     {playerHands.map((hand, handIndex) => (
                       <View
@@ -617,8 +640,12 @@ export default function BlackjackScreen() {
                           <Text style={styles.playerHandTitle}>Main {handIndex + 1}</Text>
                           <View style={styles.handBadgesRow}>
                             {handIndex === activeHandIndex && isActiveGame ? <Text style={styles.activeTag}>ACTIVE</Text> : null}
-                            {(playerScores[handIndex] ?? 0) === 21 ? <Text style={styles.blackjackTag}>BLACKJACK</Text> : null}
-                            {(playerScores[handIndex] ?? 0) > 21 ? <Text style={styles.bustTag}>BUST</Text> : null}
+                            {(visiblePlayerCounts[handIndex] ?? 0) >= hand.length && (visiblePlayerScores[handIndex] ?? 0) === 21
+                              ? <Text style={styles.blackjackTag}>BLACKJACK</Text>
+                              : null}
+                            {(visiblePlayerCounts[handIndex] ?? 0) >= hand.length && (visiblePlayerScores[handIndex] ?? 0) > 21
+                              ? <Text style={styles.bustTag}>BUST</Text>
+                              : null}
                           </View>
                         </View>
                         <View style={styles.centeredCardsRow}>
@@ -639,7 +666,7 @@ export default function BlackjackScreen() {
                             </View>
                           ))}
                         </View>
-                        <Text style={styles.scoreText}>Score: {playerScores[handIndex] ?? 0}</Text>
+                        <Text style={styles.scoreText}>Score: {visiblePlayerScores[handIndex] ?? "?"}</Text>
                       </View>
                     ))}
                     </View>

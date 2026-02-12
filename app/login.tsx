@@ -1,17 +1,17 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
-import { casinoTheme } from "./casinoTheme";
+import { casinoTheme } from "@/src/theme/casinoTheme";
 
 const BLACKJACK_API_URL = process.env.EXPO_PUBLIC_API_URL;
 

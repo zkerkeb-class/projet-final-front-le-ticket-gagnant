@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEAL_INTERVAL_MS = 520;
 const INITIAL_DEAL_DELAY_MS = 140;
+const POST_PLAYER_TO_DEALER_DELAY_MS = 520;
 
 type DealStep =
   | { target: "dealer" }
@@ -95,8 +96,18 @@ export default function useSequentialDeal(
     const steps: DealStep[] = [];
 
     for (let round = 0; round < maxDelta; round += 1) {
-      if (round < dealerDelta) {
-        steps.push({ target: "dealer" });
+      if (isNewSession) {
+        if (round < dealerDelta) {
+          steps.push({ target: "dealer" });
+        }
+
+        for (let handIndex = 0; handIndex < playerDeltas.length; handIndex += 1) {
+          if (round < playerDeltas[handIndex]) {
+            steps.push({ target: "player", handIndex });
+          }
+        }
+
+        continue;
       }
 
       for (let handIndex = 0; handIndex < playerDeltas.length; handIndex += 1) {
@@ -104,9 +115,24 @@ export default function useSequentialDeal(
           steps.push({ target: "player", handIndex });
         }
       }
+
+      if (round < dealerDelta) {
+        steps.push({ target: "dealer" });
+      }
     }
 
-    steps.forEach((step, index) => {
+    const shouldDelayDealerStart = !isNewSession && dealerDelta > 0 && playerDeltas.some((delta) => delta > 0);
+    let hasPlayerCardStep = false;
+    let dealerPauseApplied = false;
+    let scheduledDelay = INITIAL_DEAL_DELAY_MS;
+
+    steps.forEach((step) => {
+      if (shouldDelayDealerStart && !dealerPauseApplied && step.target === "dealer" && hasPlayerCardStep) {
+        scheduledDelay += POST_PLAYER_TO_DEALER_DELAY_MS;
+        dealerPauseApplied = true;
+      }
+
+      scheduledDelay += DEAL_INTERVAL_MS;
       const timeout = setTimeout(() => {
         if (step.target === "dealer") {
           dealerCountRef.current += 1;
@@ -120,7 +146,11 @@ export default function useSequentialDeal(
         playerCountsRef.current = nextCounts;
         setVisiblePlayerCounts(nextCounts);
         setDealTick((tick) => tick + 1);
-      }, INITIAL_DEAL_DELAY_MS + (index + 1) * DEAL_INTERVAL_MS);
+      }, scheduledDelay);
+
+      if (step.target === "player") {
+        hasPlayerCardStep = true;
+      }
 
       timeoutsRef.current.push(timeout);
     });

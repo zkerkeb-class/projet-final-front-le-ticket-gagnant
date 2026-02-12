@@ -10,7 +10,7 @@ import { useEffect } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
-import { casinoTheme } from "./casinoTheme";
+import { casinoTheme } from "@/src/theme/casinoTheme";
 
 export {
     ErrorBoundary
@@ -68,7 +68,6 @@ function RootLayoutNav() {
           headerTintColor: casinoTheme.colors.text,
           headerTitleStyle: { fontWeight: "800" },
           headerShadowVisible: false,
-          headerBackTitleVisible: false,
         }}
       >
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -88,6 +87,24 @@ function RootLayoutNav() {
           name="roulette"
           options={{
             title: "Roulette Électronique",
+          }}
+        />
+        <Stack.Screen
+          name="mines"
+          options={{
+            title: "Mines",
+          }}
+        />
+        <Stack.Screen
+          name="crash"
+          options={{
+            title: "Crash",
+          }}
+        />
+        <Stack.Screen
+          name="lucky-ladder"
+          options={{
+            title: "Lucky Ladder",
           }}
         />
       </Stack>
