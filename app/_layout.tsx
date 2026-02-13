@@ -7,9 +7,11 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
+import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
 export {
@@ -47,6 +49,7 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const useMobileGameHeader = Platform.OS !== "web";
 
   const professionalDarkTheme = {
     ...DarkTheme,
@@ -89,36 +92,56 @@ function RootLayoutNav() {
           name="blackjack"
           options={{
             title: "Blackjack",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
         <Stack.Screen
           name="roulette"
           options={{
             title: "Roulette Électronique",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
         <Stack.Screen
           name="mines"
           options={{
             title: "Mines",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
         <Stack.Screen
           name="crash"
           options={{
             title: "Crash",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
         <Stack.Screen
           name="lucky-ladder"
           options={{
             title: "Lucky Ladder",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
         <Stack.Screen
           name="poker"
           options={{
             title: "Texas Hold'em Pro",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
+          }}
+        />
+        <Stack.Screen
+          name="baccarat"
+          options={{
+            title: "Baccarat",
+            headerBackTitle: "Casino",
+            headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
         />
       </Stack>

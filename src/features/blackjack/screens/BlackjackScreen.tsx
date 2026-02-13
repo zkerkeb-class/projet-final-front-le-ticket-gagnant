@@ -5,7 +5,7 @@ import {
     Alert,
     Animated,
     Easing,
-    Platform,
+  Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -17,6 +17,8 @@ import {
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
+import { authStorage } from "@/src/services/authStorage";
 import Card from "../components/Card";
 import useSequentialDeal from "../hooks/useSequentialDeal";
 
@@ -71,8 +73,6 @@ type BlackjackApiState = {
   mode?: "LOCAL_FALLBACK";
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 const REQUEST_TIMEOUT_MS = 10000;
 const RESULT_PANEL_DELAY_MS = 420;
 
@@ -128,31 +128,13 @@ const parseOptionalBetAmount = (value: string): number => {
   return Number.isFinite(amount) ? amount : Number.NaN;
 };
 
-const getApiBaseUrls = (): string[] => {
-  if (API_BASE_URL) {
-    return [API_BASE_URL];
-  }
-
-  if (Platform.OS === "android") {
-    return [
-      "http://10.0.2.2:3000/api/games/blackjack",
-      "http://localhost:3000/api/games/blackjack",
-      "http://127.0.0.1:3000/api/games/blackjack",
-    ];
-  }
-
-  return [
-    "http://localhost:3000/api/games/blackjack",
-    "http://127.0.0.1:3000/api/games/blackjack",
-  ];
-};
-
 export default function BlackjackScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
+  const isPhone = width < 430;
+  const isPhoneApp = Platform.OS !== "web" && isPhone;
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
 
   const [betInput, setBetInput] = useState("50");
   const [tab, setTab] = useState<"standard" | "sidebets">("standard");
@@ -185,8 +167,13 @@ export default function BlackjackScreen() {
   }, [betInput, loading, sideBetInputs]);
 
   const apiCall = async (path: "/start" | "/hit" | "/stand" | "/split" | "/double", payload: Record<string, unknown>) => {
-    const baseUrls = getApiBaseUrls();
+    const baseUrls = getApiBaseUrls("games/blackjack");
     let lastError: Error | null = null;
+    const token = await authStorage.getToken();
+
+    if (!token) {
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
+    }
 
     for (const baseUrl of baseUrls) {
       const controller = new AbortController();
@@ -197,6 +184,7 @@ export default function BlackjackScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
           signal: controller.signal,
@@ -243,7 +231,6 @@ export default function BlackjackScreen() {
       setErrorMessage(null);
       setLoading(true);
       const nextState = await apiCall("/start", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount,
         sideBets: {
           perfectPair,
@@ -268,7 +255,6 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/hit", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -287,7 +273,6 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/stand", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -306,7 +291,6 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/split", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -325,7 +309,6 @@ export default function BlackjackScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/double", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -381,7 +364,17 @@ export default function BlackjackScreen() {
     return Math.max(0, perfectPair) + Math.max(0, twentyOnePlusThree);
   }, [sideBetInputs]);
 
-  const playerHands = gameState?.playerHands ?? (gameState ? [gameState.playerHand] : []);
+  const playerHands = useMemo(() => {
+    if (!gameState) {
+      return [] as CardType[][];
+    }
+
+    if (Array.isArray(gameState.playerHands) && gameState.playerHands.length > 0) {
+      return gameState.playerHands;
+    }
+
+    return [gameState.playerHand];
+  }, [gameState]);
   const activeHandIndex = typeof gameState?.activeHandIndex === "number" ? gameState.activeHandIndex : 0;
 
   const { visibleDealerCount, visiblePlayerCounts, dealTick } = useSequentialDeal(
@@ -555,6 +548,80 @@ export default function BlackjackScreen() {
   const sideBetResults = gameState?.sideBetResults ?? [];
   const hasPlacedSideBet = sideBetResults.some((result) => result.betAmount > 0);
   const resolvedTotalWager = gameState?.totalWager ?? ((gameState?.betAmount ?? 0) + (gameState?.sideBetTotal ?? 0));
+  const showDecisionButtons = !isPhoneApp || isActiveGame;
+
+  const renderBetPanel = () => (tab === "standard" ? (
+    <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
+      {!isPhoneApp ? <View style={styles.betHeaderRow}>
+        <Text style={[styles.betTitle, isPhone && styles.betTitlePhone]}>Montant du pari</Text>
+        <Text style={styles.betMeta}>Mise principale</Text>
+      </View> : null}
+
+      <View style={[styles.betInputWrap, isPhone && styles.betInputWrapPhone]}>
+        <View style={styles.euroBadge}>
+          <Text style={styles.euroBadgeText}>€</Text>
+        </View>
+
+        <TextInput
+          style={[styles.betInput, isPhone && styles.betInputPhone]}
+          keyboardType="numeric"
+          value={betInput}
+          onChangeText={(value) => {
+            setBetInput(value);
+            if (errorMessage) {
+              setErrorMessage(null);
+            }
+          }}
+          placeholder="0,00"
+          placeholderTextColor="#7f8899"
+        />
+
+        <Pressable style={[styles.quickButton, isPhone && styles.quickButtonPhone]} onPress={quickHalfBet}>
+          <Text style={[styles.quickButtonText, isPhone && styles.quickButtonTextPhone]}>½</Text>
+        </Pressable>
+        <Pressable style={[styles.quickButton, isPhone && styles.quickButtonPhone]} onPress={quickDoubleBet}>
+          <Text style={[styles.quickButtonText, isPhone && styles.quickButtonTextPhone]}>2x</Text>
+        </Pressable>
+      </View>
+    </View>
+  ) : (
+    <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
+      {!isPhoneApp ? <View style={styles.betHeaderRow}>
+        <Text style={[styles.betTitle, isPhone && styles.betTitlePhone]}>Mises secondaires</Text>
+        <Text style={styles.betMeta}>Optionnel</Text>
+      </View> : null}
+
+      <View style={styles.sideBetGroup}>
+        <Text style={styles.sideBetLabel}>Perfect Pair</Text>
+        <TextInput
+          style={[styles.sideBetInput, isPhone && styles.sideBetInputPhone]}
+          keyboardType="numeric"
+          value={sideBetInputs.perfectPair}
+          onChangeText={(value) => updateSideBetInput("perfectPair", value)}
+          placeholder="0,00"
+          placeholderTextColor="#7f8899"
+        />
+        <Text style={styles.sideBetHint}>Paiements: 25:1 / 12:1 / 6:1</Text>
+      </View>
+
+      <View style={styles.sideBetGroup}>
+        <Text style={styles.sideBetLabel}>21+3</Text>
+        <TextInput
+          style={[styles.sideBetInput, isPhone && styles.sideBetInputPhone]}
+          keyboardType="numeric"
+          value={sideBetInputs.twentyOnePlusThree}
+          onChangeText={(value) => updateSideBetInput("twentyOnePlusThree", value)}
+          placeholder="0,00"
+          placeholderTextColor="#7f8899"
+        />
+        <Text style={styles.sideBetHint}>Paiements: 100:1 / 40:1 / 30:1 / 10:1 / 5:1</Text>
+      </View>
+
+      <View style={styles.sideBetSummary}>
+        <Text style={styles.sideBetSummaryText}>Total mises secondaires: {sideBetTotalInput.toFixed(2)} jetons</Text>
+      </View>
+    </View>
+  ));
 
   const renderActionTile = (
     label: string,
@@ -564,124 +631,70 @@ export default function BlackjackScreen() {
     accentColor: string,
   ) => (
     <Pressable
-      style={[styles.actionTile, !enabled && styles.actionTileDisabled]}
+      style={[styles.actionTile, isPhone && styles.actionTilePhone, !enabled && styles.actionTileDisabled]}
       onPress={onPress}
       disabled={!enabled}
     >
-      <Text style={styles.actionLabel}>{label}</Text>
-      <Text style={[styles.actionIcon, { color: accentColor }]}>{icon}</Text>
+      <Text style={[styles.actionLabel, isPhone && styles.actionLabelPhone]}>{label}</Text>
+      <Text style={[styles.actionIcon, isPhone && styles.actionIconPhone, { color: accentColor }]}>{icon}</Text>
     </Pressable>
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.layout, isWide && styles.layoutWide]}>
-          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
-            <View style={styles.segmentedControl}>
+      <ScrollView contentContainerStyle={[styles.page, isPhone && styles.pagePhone]}>
+        <View style={[styles.layout, isPhone && styles.layoutPhone, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide, isPhone && styles.sidebarPhone]}>
+            {!isPhoneApp ? <View style={[styles.segmentedControl, isPhone && styles.segmentedControlPhone]}>
               <Pressable
-                style={[styles.segmentItem, tab === "standard" && styles.segmentActive]}
+                style={[styles.segmentItem, isPhone && styles.segmentItemPhone, tab === "standard" && styles.segmentActive]}
                 onPress={() => setTab("standard")}
               >
-                <Text style={[styles.segmentText, tab === "standard" && styles.segmentTextActive]}>Standard</Text>
+                <Text style={[styles.segmentText, isPhone && styles.segmentTextPhone, tab === "standard" && styles.segmentTextActive]}>Standard</Text>
               </Pressable>
               <Pressable
-                style={[styles.segmentItem, tab === "sidebets" && styles.segmentActive]}
+                style={[styles.segmentItem, isPhone && styles.segmentItemPhone, tab === "sidebets" && styles.segmentActive]}
                 onPress={() => setTab("sidebets")}
               >
-                <Text style={[styles.segmentText, tab === "sidebets" && styles.segmentTextActive]}>Mise secondaire</Text>
+                <Text style={[styles.segmentText, isPhone && styles.segmentTextPhone, tab === "sidebets" && styles.segmentTextActive]}>Mise secondaire</Text>
               </Pressable>
-            </View>
+            </View> : null}
 
-            {tab === "standard" ? (
-              <View style={styles.betPanel}>
-                <View style={styles.betHeaderRow}>
-                  <Text style={styles.betTitle}>Montant du pari</Text>
-                  <Text style={styles.betMeta}>Mise principale</Text>
-                </View>
+            {(!isPhoneApp || !isActiveGame) ? renderBetPanel() : null}
 
-                <View style={styles.betInputWrap}>
-                  <View style={styles.euroBadge}>
-                    <Text style={styles.euroBadgeText}>€</Text>
-                  </View>
-
-                  <TextInput
-                    style={styles.betInput}
-                    keyboardType="numeric"
-                    value={betInput}
-                    onChangeText={(value) => {
-                      setBetInput(value);
-                      if (errorMessage) {
-                        setErrorMessage(null);
-                      }
-                    }}
-                    placeholder="0,00"
-                    placeholderTextColor="#7f8899"
-                  />
-
-                  <Pressable style={styles.quickButton} onPress={quickHalfBet}>
-                    <Text style={styles.quickButtonText}>½</Text>
-                  </Pressable>
-                  <Pressable style={styles.quickButton} onPress={quickDoubleBet}>
-                    <Text style={styles.quickButtonText}>2x</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.betPanel}>
-                <View style={styles.betHeaderRow}>
-                  <Text style={styles.betTitle}>Mises secondaires</Text>
-                  <Text style={styles.betMeta}>Optionnel</Text>
-                </View>
-
-                <View style={styles.sideBetGroup}>
-                  <Text style={styles.sideBetLabel}>Perfect Pair</Text>
-                  <TextInput
-                    style={styles.sideBetInput}
-                    keyboardType="numeric"
-                    value={sideBetInputs.perfectPair}
-                    onChangeText={(value) => updateSideBetInput("perfectPair", value)}
-                    placeholder="0,00"
-                    placeholderTextColor="#7f8899"
-                  />
-                  <Text style={styles.sideBetHint}>Paiements: 25:1 / 12:1 / 6:1</Text>
-                </View>
-
-                <View style={styles.sideBetGroup}>
-                  <Text style={styles.sideBetLabel}>21+3</Text>
-                  <TextInput
-                    style={styles.sideBetInput}
-                    keyboardType="numeric"
-                    value={sideBetInputs.twentyOnePlusThree}
-                    onChangeText={(value) => updateSideBetInput("twentyOnePlusThree", value)}
-                    placeholder="0,00"
-                    placeholderTextColor="#7f8899"
-                  />
-                  <Text style={styles.sideBetHint}>Paiements: 100:1 / 40:1 / 30:1 / 10:1 / 5:1</Text>
-                </View>
-
-                <View style={styles.sideBetSummary}>
-                  <Text style={styles.sideBetSummaryText}>Total mises secondaires: {sideBetTotalInput.toFixed(2)} jetons</Text>
-                </View>
-              </View>
-            )}
+            {isPhoneApp && !gameState ? <View style={[styles.segmentedControl, styles.segmentedControlPhone, styles.segmentedControlBottomPhone]}>
+              <Pressable
+                style={[styles.segmentItem, styles.segmentItemPhone, tab === "standard" && styles.segmentActive]}
+                onPress={() => setTab("standard")}
+              >
+                <Text style={[styles.segmentText, styles.segmentTextPhone, tab === "standard" && styles.segmentTextActive]}>Standard</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.segmentItem, styles.segmentItemPhone, tab === "sidebets" && styles.segmentActive]}
+                onPress={() => setTab("sidebets")}
+              >
+                <Text style={[styles.segmentText, styles.segmentTextPhone, tab === "sidebets" && styles.segmentTextActive]}>Mise secondaire</Text>
+              </Pressable>
+            </View> : null}
 
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
-            <View style={styles.actionsGrid}>
+            {showDecisionButtons ? <View style={[styles.actionsGrid, isPhone && styles.actionsGridPhone]}>
               {renderActionTile("Piocher", "↳", handleHit, isPlayerTurn && !loading && availableActions.hit, "#34d399")}
               {renderActionTile("Rester", "✋", handleStand, isPlayerTurn && !loading && availableActions.stand, "#f87171")}
               {renderActionTile("Splitter", "↱", handleSplit, isPlayerTurn && !loading && availableActions.split, "#60a5fa")}
               {renderActionTile("Doubler", "⧉", handleDouble, isPlayerTurn && !loading && availableActions.double, "#facc15")}
-            </View>
+            </View> : null}
+
+            {isPhoneApp && isActiveGame ? renderBetPanel() : null}
 
             {!gameState ? (
-              <Pressable style={[styles.ctaButton, !canStart && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart}>
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaButtonText}>Pari</Text>}
+              <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone, !canStart && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Pari</Text>}
               </Pressable>
             ) : !isActiveGame ? (
-              <Pressable style={styles.ctaButton} onPress={handleReplay}>
-                <Text style={styles.ctaButtonText}>Rejouer</Text>
+              <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={handleReplay}>
+                <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Rejouer</Text>
               </Pressable>
             ) : (
               <View style={styles.inGamePill}>
@@ -690,14 +703,16 @@ export default function BlackjackScreen() {
             )}
           </View>
 
-          <View style={styles.tableArea}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={styles.tableTitle}>BLACKJACK</Text>
-              <View style={styles.tableHeaderRight}>
-                <ChipBalanceBadge userId={resolvedUserId} amount={gameState?.chipBalance} compact />
-                {gameState?.mode === "LOCAL_FALLBACK" ? <Text style={styles.localModeChip}>Mode local</Text> : null}
+          <View style={[styles.tableArea, isPhone && styles.tableAreaPhone]}>
+            {!isPhone ? (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableTitle}>BLACKJACK</Text>
+                <View style={styles.tableHeaderRight}>
+                  <ChipBalanceBadge userId={routeUserId} amount={gameState?.chipBalance} compact />
+                  {gameState?.mode === "LOCAL_FALLBACK" ? <Text style={styles.localModeChip}>Mode local</Text> : null}
+                </View>
               </View>
-            </View>
+            ) : null}
 
             {!gameState ? (
               <View style={styles.emptyState}>
@@ -706,7 +721,7 @@ export default function BlackjackScreen() {
               </View>
             ) : (
               <View style={styles.tableContent}>
-                <View style={styles.infoBar}>
+                {!isPhone ? <View style={styles.infoBar}>
                   <View>
                     <Text style={styles.infoLabel}>Mise totale</Text>
                     <Text style={styles.infoValue}>{resolvedTotalWager.toFixed(2)} jetons</Text>
@@ -719,7 +734,7 @@ export default function BlackjackScreen() {
                     <Text style={styles.infoLabel}>Pioche</Text>
                     <Text style={styles.infoValue}>{gameState.remainingCards} cartes</Text>
                   </View>
-                </View>
+                </View> : null}
 
                 {hasPlacedSideBet && (
                   <View style={styles.sideBetResultPanel}>
@@ -735,16 +750,16 @@ export default function BlackjackScreen() {
                   </View>
                 )}
 
-                <View style={styles.phaseBanner}>
+                {!isPhone ? <View style={styles.phaseBanner}>
                   <Text style={styles.phaseBannerText}>
                     {isDealing
                       ? (isPlayerRevealing ? "Votre main se complète..." : "Le croupier distribue les cartes...")
                       : (isActiveGame ? "À vous de jouer" : (isDealerRevealing ? "Tour du croupier" : "Main terminée"))}
                   </Text>
-                </View>
+                </View> : null}
 
-                <View style={styles.playMat}>
-                  <Animated.View style={[styles.virtualDeckWrap, deckPulseStyle]}>
+                <View style={[styles.playMat, isPhone && styles.playMatPhone]}>
+                  <Animated.View style={[styles.virtualDeckWrap, isPhone && styles.virtualDeckWrapPhone, deckPulseStyle]}>
                     <View style={styles.virtualDeckShadowA} />
                     <View style={styles.virtualDeckShadowB} />
                     <View style={styles.virtualDeckTop}>
@@ -762,6 +777,7 @@ export default function BlackjackScreen() {
                           key={`${card.suit}-${card.value}-${index}`}
                           style={[
                             styles.stackedCard,
+                            isPhone && styles.stackedCardPhone,
                             styles.dealerCard,
                             index === 0 ? styles.firstStackedCard : null,
                             {
@@ -784,7 +800,11 @@ export default function BlackjackScreen() {
                     {playerHands.map((hand, handIndex) => (
                       <View
                         key={`hand-${handIndex}`}
-                        style={[styles.playerHandCard, handIndex === activeHandIndex && isActiveGame ? styles.playerHandActive : null]}
+                        style={[
+                          styles.playerHandCard,
+                          isPhone && styles.playerHandCardPhone,
+                          handIndex === activeHandIndex && isActiveGame ? styles.playerHandActive : null,
+                        ]}
                       >
                         <View style={styles.playerHandHeader}>
                           <Text style={styles.playerHandTitle}>Main {handIndex + 1}</Text>
@@ -804,6 +824,7 @@ export default function BlackjackScreen() {
                               key={`${card.suit}-${card.value}-${handIndex}-${cardIndex}`}
                               style={[
                                 styles.stackedCard,
+                                isPhone && styles.stackedCardPhone,
                                 styles.playerCard,
                                 cardIndex === 0 ? styles.firstStackedCard : null,
                                 {
@@ -852,9 +873,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
+  pagePhone: {
+    padding: 10,
+  },
   layout: {
     flexDirection: "column",
     gap: 14,
+  },
+  layoutPhone: {
+    flexDirection: "column-reverse",
   },
   layoutWide: {
     flexDirection: "row",
@@ -868,6 +895,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1c2738",
   },
+  sidebarPhone: {
+    padding: 10,
+    gap: 10,
+  },
   sidebarWide: {
     width: 360,
   },
@@ -878,12 +909,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
   },
+  segmentedControlPhone: {
+    padding: 4,
+    gap: 4,
+  },
+  segmentedControlBottomPhone: {
+    marginTop: "auto",
+  },
   segmentItem: {
     flex: 1,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
+  },
+  segmentItemPhone: {
+    paddingVertical: 7,
   },
   segmentActive: {
     backgroundColor: "#363f50",
@@ -893,11 +934,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  segmentTextPhone: {
+    fontSize: 13,
+  },
   segmentTextActive: {
     color: "#f3f4f6",
   },
   betPanel: {
     gap: 10,
+  },
+  betPanelPhone: {
+    gap: 8,
   },
   betHeaderRow: {
     flexDirection: "row",
@@ -908,6 +955,9 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
     fontSize: 28,
     fontWeight: "700",
+  },
+  betTitlePhone: {
+    fontSize: 20,
   },
   betMeta: {
     color: "#8fa0b8",
@@ -924,6 +974,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 62,
     gap: 8,
+  },
+  betInputWrapPhone: {
+    height: 48,
+    paddingHorizontal: 8,
+    gap: 6,
   },
   euroBadge: {
     width: 22,
@@ -945,6 +1000,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingVertical: 0,
   },
+  betInputPhone: {
+    fontSize: 18,
+  },
   quickButton: {
     width: 42,
     height: 42,
@@ -953,10 +1011,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  quickButtonPhone: {
+    width: 32,
+    height: 32,
+    borderRadius: 7,
+  },
   quickButtonText: {
     color: "#d6dbe5",
     fontSize: 20,
     fontWeight: "700",
+  },
+  quickButtonTextPhone: {
+    fontSize: 14,
   },
   sideBetGroup: {
     backgroundColor: "#1b2434",
@@ -981,6 +1047,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  sideBetInputPhone: {
+    fontSize: 16,
+    paddingVertical: 6,
   },
   sideBetHint: {
     color: "#8fa0b8",
@@ -1010,6 +1080,9 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  actionsGridPhone: {
+    gap: 6,
+  },
   actionTile: {
     width: "48%",
     minHeight: 74,
@@ -1023,6 +1096,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  actionTilePhone: {
+    minHeight: 56,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   actionTileDisabled: {
     opacity: 0.42,
   },
@@ -1031,9 +1109,15 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
+  actionLabelPhone: {
+    fontSize: 14,
+  },
   actionIcon: {
     fontSize: 24,
     fontWeight: "900",
+  },
+  actionIconPhone: {
+    fontSize: 18,
   },
   ctaButton: {
     height: 68,
@@ -1047,6 +1131,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 5,
   },
+  ctaButtonPhone: {
+    height: 50,
+  },
   ctaButtonDisabled: {
     opacity: 0.4,
   },
@@ -1054,6 +1141,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 30,
     fontWeight: "800",
+  },
+  ctaButtonTextPhone: {
+    fontSize: 18,
   },
   inGamePill: {
     height: 48,
@@ -1078,6 +1168,10 @@ const styles = StyleSheet.create({
     padding: 18,
     minHeight: 560,
   },
+  tableAreaPhone: {
+    padding: 12,
+    minHeight: 500,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1093,6 +1187,9 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+  tableTitlePhone: {
+    fontSize: 24,
   },
   localModeChip: {
     color: "#111827",
@@ -1174,6 +1271,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
+  infoBarPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
   infoLabel: {
     color: "#89a0c6",
     fontSize: 12,
@@ -1228,6 +1329,11 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
   },
+  playMatPhone: {
+    minHeight: 360,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
   virtualDeckWrap: {
     position: "absolute",
     right: 24,
@@ -1237,6 +1343,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
+  },
+  virtualDeckWrapPhone: {
+    width: 66,
+    right: 8,
   },
   virtualDeckShadowA: {
     position: "absolute",
@@ -1327,6 +1437,9 @@ const styles = StyleSheet.create({
   stackedCard: {
     marginLeft: -46,
   },
+  stackedCardPhone: {
+    marginLeft: -40,
+  },
   firstStackedCard: {
     marginLeft: 0,
   },
@@ -1356,6 +1469,9 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 260,
     alignItems: "center",
+  },
+  playerHandCardPhone: {
+    minWidth: "100%",
   },
   playerHandActive: {
     borderColor: "transparent",

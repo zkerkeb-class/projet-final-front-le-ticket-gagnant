@@ -1,9 +1,6 @@
-import { Platform } from "react-native";
+import { getApiBaseUrls } from "./apiBaseUrl";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 const REQUEST_TIMEOUT_MS = 9000;
-
-const unique = (values: string[]) => Array.from(new Set(values));
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit) => {
   const controller = new AbortController();
@@ -17,33 +14,6 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit) =>
   } finally {
     clearTimeout(timeoutId);
   }
-};
-
-const getApiBaseUrls = (): string[] => {
-  const normalizedEnvUrl = API_BASE_URL?.replace(/\/games\/blackjack\/?$/, "");
-
-  if (API_BASE_URL) {
-    if (Platform.OS === "android") {
-      return unique([
-        normalizedEnvUrl,
-        "http://10.0.2.2:3000/api",
-        "http://localhost:3000/api",
-        "http://127.0.0.1:3000/api",
-      ].filter((value): value is string => Boolean(value)));
-    }
-
-    return unique([
-      normalizedEnvUrl,
-      "http://localhost:3000/api",
-      "http://127.0.0.1:3000/api",
-    ].filter((value): value is string => Boolean(value)));
-  }
-
-  if (Platform.OS === "android") {
-    return ["http://10.0.2.2:3000/api", "http://localhost:3000/api", "http://127.0.0.1:3000/api"];
-  }
-
-  return ["http://localhost:3000/api", "http://127.0.0.1:3000/api"];
 };
 
 export type AuthUser = {

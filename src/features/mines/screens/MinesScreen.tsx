@@ -5,7 +5,6 @@ import {
     Alert,
     Animated,
     Easing,
-    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -17,6 +16,8 @@ import {
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
+import { authStorage } from "@/src/services/authStorage";
 
 type MinesStatus = "ACTIVE" | "WON" | "LOST" | "CASHED_OUT";
 
@@ -40,9 +41,6 @@ type MinesApiState = {
   };
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
-
 const parsePositiveNumber = (value: string): number => {
   const normalized = value.replace(/\s+/g, "").replace(",", ".");
   const parsed = Number(normalized);
@@ -63,25 +61,6 @@ const parseMinesCount = (value: string): number => {
   return parsed;
 };
 
-const getApiBaseUrls = (): string[] => {
-  if (API_BASE_URL) {
-    return [API_BASE_URL.replace(/\/games\/blackjack\/?$/, "/games/mines")];
-  }
-
-  if (Platform.OS === "android") {
-    return [
-      "http://10.0.2.2:3000/api/games/mines",
-      "http://localhost:3000/api/games/mines",
-      "http://127.0.0.1:3000/api/games/mines",
-    ];
-  }
-
-  return [
-    "http://localhost:3000/api/games/mines",
-    "http://127.0.0.1:3000/api/games/mines",
-  ];
-};
-
 const statusText: Record<Exclude<MinesStatus, "ACTIVE">, string> = {
   WON: "Jackpot! Toutes les cases sûres sont ouvertes.",
   LOST: "Boom 💣 vous avez touché une mine.",
@@ -91,9 +70,9 @@ const statusText: Record<Exclude<MinesStatus, "ACTIVE">, string> = {
 export default function MinesScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
+  const isPhone = width < 430;
 
   const [betInput, setBetInput] = useState("20");
   const [minesInput, setMinesInput] = useState("5");
@@ -127,8 +106,13 @@ export default function MinesScreen() {
   }, [betInput, minesInput, loading]);
 
   const apiCall = async (path: "/start" | "/reveal" | "/cashout", payload: Record<string, unknown>) => {
-    const baseUrls = getApiBaseUrls();
+    const baseUrls = getApiBaseUrls("games/mines");
     let lastError: Error | null = null;
+    const token = await authStorage.getToken();
+
+    if (!token) {
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
+    }
 
     for (const baseUrl of baseUrls) {
       try {
@@ -136,6 +120,7 @@ export default function MinesScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });
@@ -171,7 +156,6 @@ export default function MinesScreen() {
       setLoading(true);
       setErrorMessage(null);
       const nextState = await apiCall("/start", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount,
         minesCount,
       });
@@ -193,7 +177,6 @@ export default function MinesScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/reveal", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
         cellIndex,
       });
@@ -217,7 +200,6 @@ export default function MinesScreen() {
     try {
       setLoading(true);
       const nextState = await apiCall("/cashout", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(nextState);
@@ -276,20 +258,20 @@ export default function MinesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.layout, isWide && styles.layoutWide]}>
-          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
-            <View style={styles.betPanel}>
+      <ScrollView contentContainerStyle={[styles.page, isPhone && styles.pagePhone]}>
+        <View style={[styles.layout, isPhone && styles.layoutPhone, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide, isPhone && styles.sidebarPhone]}>
+            <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
               <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Jeu des Mines</Text>
+                <Text style={[styles.panelTitle, isPhone && styles.panelTitlePhone]}>Jeu des Mines</Text>
                 <Text style={styles.panelMeta}>Risque / Reward</Text>
               </View>
 
               <Text style={styles.inputLabel}>Mise</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, isPhone && styles.inputWrapPhone]}>
                 <Text style={styles.inputPrefix}>€</Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, isPhone && styles.textInputPhone]}
                   keyboardType="numeric"
                   value={betInput}
                   onChangeText={setBetInput}
@@ -299,10 +281,10 @@ export default function MinesScreen() {
               </View>
 
               <Text style={styles.inputLabel}>Nombre de mines (1-24)</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, isPhone && styles.inputWrapPhone]}>
                 <Text style={styles.inputPrefix}>💣</Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, isPhone && styles.textInputPhone]}
                   keyboardType="numeric"
                   value={minesInput}
                   onChangeText={setMinesInput}
@@ -314,14 +296,14 @@ export default function MinesScreen() {
 
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
-            <View style={styles.actionsStack}>
+            <View style={[styles.actionsStack, isPhone && styles.actionsStackPhone]}>
               {!gameState ? (
-                <Pressable style={[styles.ctaButton, !canStart && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaButtonText}>Démarrer</Text>}
+                <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone, !canStart && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart}>
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Démarrer</Text>}
                 </Pressable>
               ) : isActiveGame ? (
                 <>
-                  <Pressable style={[styles.secondaryButton, loading && styles.ctaButtonDisabled]} onPress={handleCashout} disabled={loading || !gameState.availableActions.cashout}>
+                  <Pressable style={[styles.secondaryButton, isPhone && styles.secondaryButtonPhone, loading && styles.ctaButtonDisabled]} onPress={handleCashout} disabled={loading || !gameState.availableActions.cashout}>
                     <Text style={styles.secondaryButtonText}>Encaisser</Text>
                   </Pressable>
                   <View style={styles.inGamePill}>
@@ -329,18 +311,20 @@ export default function MinesScreen() {
                   </View>
                 </>
               ) : (
-                <Pressable style={styles.ctaButton} onPress={handleReplay}>
-                  <Text style={styles.ctaButtonText}>Rejouer</Text>
+                <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={handleReplay}>
+                  <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Rejouer</Text>
                 </Pressable>
               )}
             </View>
           </View>
 
-          <View style={styles.tableArea}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={styles.tableTitle}>MINES</Text>
-              <ChipBalanceBadge userId={resolvedUserId} amount={gameState?.chipBalance} compact />
-            </View>
+          <View style={[styles.tableArea, isPhone && styles.tableAreaPhone]}>
+            {!isPhone ? (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableTitle}>MINES</Text>
+                <ChipBalanceBadge userId={routeUserId} amount={gameState?.chipBalance} compact />
+              </View>
+            ) : null}
 
             {!gameState ? (
               <View style={styles.emptyState}>
@@ -349,7 +333,7 @@ export default function MinesScreen() {
               </View>
             ) : (
               <View style={styles.tableContent}>
-                <View style={styles.infoBar}>
+                <View style={[styles.infoBar, isPhone && styles.infoBarPhone]}>
                   <View>
                     <Text style={styles.infoLabel}>Mines</Text>
                     <Text style={styles.infoValue}>{gameState.minesCount}</Text>
@@ -455,9 +439,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
+  pagePhone: {
+    padding: 10,
+  },
   layout: {
     flexDirection: "column",
     gap: 14,
+  },
+  layoutPhone: {
+    flexDirection: "column-reverse",
   },
   layoutWide: {
     flexDirection: "row",
@@ -471,11 +461,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1c2738",
   },
+  sidebarPhone: {
+    padding: 8,
+    gap: 8,
+  },
   sidebarWide: {
     width: 360,
   },
   betPanel: {
     gap: 10,
+  },
+  betPanelPhone: {
+    gap: 8,
   },
   panelHeaderRow: {
     flexDirection: "row",
@@ -486,6 +483,9 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
     fontSize: 28,
     fontWeight: "700",
+  },
+  panelTitlePhone: {
+    fontSize: 20,
   },
   panelMeta: {
     color: "#8fa0b8",
@@ -508,6 +508,9 @@ const styles = StyleSheet.create({
     height: 54,
     gap: 8,
   },
+  inputWrapPhone: {
+    height: 44,
+  },
   inputPrefix: {
     color: "#cde0ff",
     fontSize: 18,
@@ -520,6 +523,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingVertical: 0,
   },
+  textInputPhone: {
+    fontSize: 16,
+  },
   errorText: {
     color: "#f87171",
     fontSize: 14,
@@ -528,12 +534,18 @@ const styles = StyleSheet.create({
   actionsStack: {
     gap: 10,
   },
+  actionsStackPhone: {
+    gap: 8,
+  },
   ctaButton: {
     height: 60,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#7a17ff",
+  },
+  ctaButtonPhone: {
+    height: 46,
   },
   ctaButtonDisabled: {
     opacity: 0.45,
@@ -543,6 +555,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "800",
   },
+  ctaButtonTextPhone: {
+    fontSize: 17,
+  },
   secondaryButton: {
     height: 54,
     borderRadius: 10,
@@ -551,6 +566,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#134e4a",
     borderWidth: 1,
     borderColor: "#0f766e",
+  },
+  secondaryButtonPhone: {
+    height: 46,
   },
   secondaryButtonText: {
     color: "#ccfbf1",
@@ -580,6 +598,10 @@ const styles = StyleSheet.create({
     padding: 18,
     minHeight: 560,
   },
+  tableAreaPhone: {
+    padding: 10,
+    minHeight: 500,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -591,6 +613,9 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+  tableTitlePhone: {
+    fontSize: 20,
   },
   emptyState: {
     flex: 1,
@@ -626,6 +651,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(17, 26, 42, 0.78)",
     paddingVertical: 12,
     paddingHorizontal: 14,
+  },
+  infoBarPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   infoLabel: {
     color: "#89a0c6",

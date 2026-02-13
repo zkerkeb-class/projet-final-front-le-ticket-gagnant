@@ -16,8 +16,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const payload = await window.CasinoApi.registerPlayer({ username, email, password });
-      localStorage.setItem("casino_token", payload.token);
-      localStorage.setItem("casino_user", JSON.stringify(payload.user));
+      sessionStorage.setItem("casino_token", payload.token);
+      sessionStorage.setItem("casino_user", JSON.stringify(payload.user));
 
       message.textContent = "Compte créé. Bienvenue au casino !";
       message.className = "message ok";

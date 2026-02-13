@@ -7,7 +7,6 @@ import { BLACK_NUMBERS, RED_NUMBERS } from "../utils/payouts";
 type RouletteWheelProps = {
   spinning: boolean;
   result: number | null;
-  onResultGenerated?: (result: number) => void;
 };
 
 const EUROPEAN_WHEEL_ORDER = [
@@ -42,8 +41,9 @@ function getResultColor(number: number | null) {
   return getPocketColor(number);
 }
 
-export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteWheelProps) {
+export function RouletteWheel({ spinning, result }: RouletteWheelProps) {
   const { width } = useWindowDimensions();
+  const isPhone = width < 430;
 
   const [settledResult, setSettledResult] = useState<number | null>(null);
 
@@ -58,11 +58,15 @@ export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteW
   const ballLane = useRef(new Animated.Value(0)).current;
 
   const previousSpinningRef = useRef(false);
+  const hasAnimatedCurrentSpinRef = useRef(false);
 
   const wheelSize = useMemo(() => {
     const available = width - 44;
+    if (isPhone) {
+      return Math.max(230, Math.min(292, available));
+    }
     return Math.max(250, Math.min(330, available));
-  }, [width]);
+  }, [isPhone, width]);
 
   const wheelScale = wheelSize / 330;
 
@@ -101,11 +105,23 @@ export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteW
   // Animation immédiate quand spinning démarre
   useEffect(() => {
     const justStartedSpinning = !previousSpinningRef.current && spinning;
+    const justStoppedSpinning = previousSpinningRef.current && !spinning;
     previousSpinningRef.current = spinning;
 
-    if (!justStartedSpinning) {
+    if (justStoppedSpinning) {
+      hasAnimatedCurrentSpinRef.current = false;
       return;
     }
+
+    if (justStartedSpinning) {
+      hasAnimatedCurrentSpinRef.current = false;
+    }
+
+    if (!spinning || hasAnimatedCurrentSpinRef.current || result === null) {
+      return;
+    }
+
+    hasAnimatedCurrentSpinRef.current = true;
 
     // Cacher le numéro pendant que la roue tourne
     setSettledResult(null);
@@ -125,17 +141,10 @@ export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteW
     // VARIABLE MAGIQUE DE CALIBRAGE (ajuster si décalage)
     const CORRECTION = 0;
 
-    // ===== GÉNÉRATION DU RÉSULTAT =====
+    // ===== RÉSULTAT BACKEND =====
     // Angle aléatoire où la bille s'arrête (0-360°)
     const offset = Math.floor(Math.random() * 360);
-    
-    // Générer le numéro gagnant (0-36)
-    const winningNumber = Math.floor(Math.random() * 37);
-    
-    // Envoyer le résultat au parent (hook) pour les calculs de gains
-    if (onResultGenerated) {
-      onResultGenerated(winningNumber);
-    }
+    const winningNumber = result;
 
     // ===== CALCUL DE LA POSITION DU GAGNANT =====
     // Trouver l'index du gagnant dans l'ordre de la roue
@@ -190,7 +199,7 @@ export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteW
       // Afficher le résultat À LA FIN de l'animation
       setSettledResult(winningNumber);
     });
-  }, [spinning, wheelAngle, ballAngle, ballLane]);
+  }, [spinning, result, wheelAngle, ballAngle, ballLane]);
 
   return (
     <View style={[styles.container, { width: wheelSize, height: wheelSize }]}>

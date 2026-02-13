@@ -1,6 +1,6 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Animated, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
@@ -41,70 +41,79 @@ export default function HomeScreen() {
   const username = Array.isArray(params.username) ? params.username[0] : params.username;
   const resolvedUserId = userId ?? FALLBACK_USER_ID;
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await authStorage.clearSession();
     router.replace("/login");
-  };
+  }, [router]);
 
-  const handleGoToBlackjack = () => {
+  const handleGoToBlackjack = useCallback(() => {
     router.push({
       pathname: "/blackjack",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenRoulette = () => {
+  const handleOpenRoulette = useCallback(() => {
     router.push({
       pathname: "/roulette",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenMines = () => {
+  const handleOpenMines = useCallback(() => {
     router.push({
       pathname: "/mines",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenCrash = () => {
+  const handleOpenCrash = useCallback(() => {
     router.push({
       pathname: "/crash",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenLuckyLadder = () => {
+  const handleOpenLuckyLadder = useCallback(() => {
     router.push({
       pathname: "/lucky-ladder",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenPoker = () => {
+  const handleOpenPoker = useCallback(() => {
     router.push({
       pathname: "/poker",
       params: {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
       },
     });
-  };
+  }, [resolvedUserId, router]);
 
-  const handleOpenProfile = () => {
+  const handleOpenBaccarat = useCallback(() => {
+    router.push({
+      pathname: "/baccarat",
+      params: {
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+      },
+    });
+  }, [resolvedUserId, router]);
+
+  const handleOpenProfile = useCallback(() => {
     router.push("/profile");
-  };
+  }, [router]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <View style={styles.headerActions}>
@@ -117,7 +126,7 @@ export default function HomeScreen() {
         </View>
       ),
     });
-  }, [navigation]);
+  }, [navigation, handleOpenProfile, handleLogout]);
 
   useEffect(() => {
     Animated.parallel([
@@ -216,6 +225,17 @@ export default function HomeScreen() {
       blobB: "rgba(90, 72, 127, 0.24)",
       diagonal: "rgba(138, 112, 73, 0.22)",
       onPress: handleOpenPoker,
+    },
+    {
+      key: "baccarat",
+      icon: "🃟",
+      title: "BACCARAT",
+      subtitle: "Player / Banker / Tie",
+      border: "rgba(145, 120, 191, 0.82)",
+      blobA: "rgba(97, 80, 141, 0.36)",
+      blobB: "rgba(120, 90, 145, 0.22)",
+      diagonal: "rgba(111, 90, 152, 0.24)",
+      onPress: handleOpenBaccarat,
     },
   ] as const;
 

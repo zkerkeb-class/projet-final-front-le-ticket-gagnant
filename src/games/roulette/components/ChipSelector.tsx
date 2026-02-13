@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { rouletteTheme } from "../assets/theme";
 
 type ChipSelectorProps = {
@@ -8,8 +8,11 @@ type ChipSelectorProps = {
 };
 
 export function ChipSelector({ selectedChip, chips, onSelect }: ChipSelectorProps) {
+  const { width } = useWindowDimensions();
+  const isPhone = width < 430;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isPhone && styles.containerPhone]}>
       {chips.map((chipValue) => {
         const selected = chipValue === selectedChip;
         return (
@@ -17,6 +20,7 @@ export function ChipSelector({ selectedChip, chips, onSelect }: ChipSelectorProp
             key={chipValue}
             style={({ hovered, pressed }: any) => [
               styles.chip,
+              isPhone && styles.chipPhone,
               selected ? styles.chipSelected : null,
               hovered ? styles.chipHover : null,
               pressed ? styles.chipPressed : null,
@@ -24,7 +28,7 @@ export function ChipSelector({ selectedChip, chips, onSelect }: ChipSelectorProp
             onPress={() => onSelect(chipValue)}
           >
             <View style={styles.chipGloss} />
-            <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{chipValue}</Text>
+            <Text style={[styles.chipText, isPhone && styles.chipTextPhone, selected && styles.chipTextSelected]}>{chipValue}</Text>
           </Pressable>
         );
       })}
@@ -38,6 +42,9 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  containerPhone: {
+    gap: 8,
+  },
   chip: {
     width: 58,
     height: 58,
@@ -48,6 +55,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  chipPhone: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   chipGloss: {
     position: "absolute",
@@ -79,6 +91,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 14,
     letterSpacing: 0.6,
+  },
+  chipTextPhone: {
+    fontSize: 12,
   },
   chipTextSelected: {
     color: rouletteTheme.colors.warmGold,

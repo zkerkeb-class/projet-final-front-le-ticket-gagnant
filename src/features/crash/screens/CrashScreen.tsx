@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -15,6 +14,8 @@ import {
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
+import { authStorage } from "@/src/services/authStorage";
 
 type CrashStatus = "ACTIVE" | "LOST" | "CASHED_OUT";
 
@@ -33,9 +34,6 @@ type CrashApiState = {
   };
   history: number[];
 };
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 
 const SKY_STARS = [
   { left: "8%", top: "10%", size: 3 },
@@ -68,31 +66,12 @@ const parseOptionalPositive = (value: string): number | null => {
   return parsed;
 };
 
-const getApiBaseUrls = (): string[] => {
-  if (API_BASE_URL) {
-    return [API_BASE_URL.replace(/\/games\/blackjack\/?$/, "/games/crash")];
-  }
-
-  if (Platform.OS === "android") {
-    return [
-      "http://10.0.2.2:3000/api/games/crash",
-      "http://localhost:3000/api/games/crash",
-      "http://127.0.0.1:3000/api/games/crash",
-    ];
-  }
-
-  return [
-    "http://localhost:3000/api/games/crash",
-    "http://127.0.0.1:3000/api/games/crash",
-  ];
-};
-
 export default function CrashScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
   const { width, height } = useWindowDimensions();
   const isWide = width >= 980;
+  const isPhone = width < 430;
 
   const [betInput, setBetInput] = useState("20");
   const [autoCashoutInput, setAutoCashoutInput] = useState("2.00");
@@ -108,8 +87,13 @@ export default function CrashScreen() {
   const isActiveRound = gameState?.status === "ACTIVE";
 
   const apiCall = async (path: "/start" | "/state" | "/cashout", payload?: Record<string, unknown>) => {
-    const baseUrls = getApiBaseUrls();
+    const baseUrls = getApiBaseUrls("games/crash");
     let lastError: Error | null = null;
+    const token = await authStorage.getToken();
+
+    if (!token) {
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
+    }
 
     for (const baseUrl of baseUrls) {
       try {
@@ -117,6 +101,7 @@ export default function CrashScreen() {
           method: path === "/state" ? "POST" : "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload ?? {}),
         });
@@ -190,7 +175,6 @@ export default function CrashScreen() {
     const timer = setInterval(async () => {
       try {
         const latest = await apiCall("/state", {
-          ...(resolvedUserId ? { userId: resolvedUserId } : {}),
           sessionId: gameState.sessionId,
         });
 
@@ -215,7 +199,7 @@ export default function CrashScreen() {
     return () => {
       clearInterval(timer);
     };
-  }, [gameState?.sessionId, gameState?.status, resolvedUserId]);
+  }, [gameState?.sessionId, gameState?.status]);
 
   const handleStart = async () => {
     const bet = parsePositive(betInput);
@@ -233,7 +217,6 @@ export default function CrashScreen() {
       setErrorMessage(null);
 
       const state = await apiCall("/start", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount: bet,
         autoCashoutAt: auto,
       });
@@ -258,7 +241,6 @@ export default function CrashScreen() {
     try {
       setLoading(true);
       const state = await apiCall("/cashout", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(state);
@@ -330,20 +312,20 @@ export default function CrashScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.layout, isWide && styles.layoutWide]}>
-          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
-            <View style={styles.betPanel}>
+      <ScrollView contentContainerStyle={[styles.page, isPhone && styles.pagePhone]}>
+        <View style={[styles.layout, isPhone && styles.layoutPhone, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide, isPhone && styles.sidebarPhone]}>
+            <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
               <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Crash</Text>
+                <Text style={[styles.panelTitle, isPhone && styles.panelTitlePhone]}>Crash</Text>
                 <Text style={styles.panelMeta}>Fusée x∞</Text>
               </View>
 
               <Text style={styles.inputLabel}>Mise</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, isPhone && styles.inputWrapPhone]}>
                 <Text style={styles.inputPrefix}>€</Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, isPhone && styles.textInputPhone]}
                   keyboardType="numeric"
                   value={betInput}
                   onChangeText={setBetInput}
@@ -353,10 +335,10 @@ export default function CrashScreen() {
               </View>
 
               <Text style={styles.inputLabel}>Auto cashout (optionnel)</Text>
-              <View style={styles.inputWrap}>
+              <View style={[styles.inputWrap, isPhone && styles.inputWrapPhone]}>
                 <Text style={styles.inputPrefix}>x</Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, isPhone && styles.textInputPhone]}
                   keyboardType="numeric"
                   value={autoCashoutInput}
                   onChangeText={setAutoCashoutInput}
@@ -369,30 +351,32 @@ export default function CrashScreen() {
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
             {!gameState ? (
-              <Pressable style={[styles.ctaButton, (!canStart || loading) && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart || loading}>
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaButtonText}>Lancer</Text>}
+              <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone, (!canStart || loading) && styles.ctaButtonDisabled]} onPress={handleStart} disabled={!canStart || loading}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Lancer</Text>}
               </Pressable>
             ) : gameState.status === "ACTIVE" ? (
-              <View style={styles.actionsStack}>
-                <Pressable style={[styles.cashoutButton, loading && styles.ctaButtonDisabled]} onPress={handleCashout} disabled={loading || !gameState.availableActions.cashout}>
-                  <Text style={styles.cashoutButtonText}>Encaisser x{displayedMultiplier.toFixed(2)}</Text>
+              <View style={[styles.actionsStack, isPhone && styles.actionsStackPhone]}>
+                <Pressable style={[styles.cashoutButton, isPhone && styles.cashoutButtonPhone, loading && styles.ctaButtonDisabled]} onPress={handleCashout} disabled={loading || !gameState.availableActions.cashout}>
+                  <Text style={[styles.cashoutButtonText, isPhone && styles.cashoutButtonTextPhone]}>Encaisser x{displayedMultiplier.toFixed(2)}</Text>
                 </Pressable>
                 <View style={styles.inGamePill}>
                   <Text style={styles.inGameText}>Vol en cours...</Text>
                 </View>
               </View>
             ) : (
-              <Pressable style={styles.ctaButton} onPress={handleReplay}>
-                <Text style={styles.ctaButtonText}>Rejouer</Text>
+              <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={handleReplay}>
+                <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Rejouer</Text>
               </Pressable>
             )}
           </View>
 
-          <View style={styles.tableArea}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={styles.tableTitle}>CRASH</Text>
-              <ChipBalanceBadge userId={resolvedUserId} amount={gameState?.chipBalance} compact />
-            </View>
+          <View style={[styles.tableArea, isPhone && styles.tableAreaPhone]}>
+            {!isPhone ? (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableTitle}>CRASH</Text>
+                <ChipBalanceBadge userId={routeUserId} amount={gameState?.chipBalance} compact />
+              </View>
+            ) : null}
 
             {!gameState ? (
               <View style={styles.emptyState}>
@@ -401,7 +385,7 @@ export default function CrashScreen() {
               </View>
             ) : (
               <View style={styles.tableContent}>
-                <View style={styles.infoBar}>
+                <View style={[styles.infoBar, isPhone && styles.infoBarPhone]}>
                   <View>
                     <Text style={styles.infoLabel}>MISE</Text>
                     <Text style={styles.infoValue}>{gameState.betAmount.toFixed(2)}</Text>
@@ -416,8 +400,8 @@ export default function CrashScreen() {
                   </View>
                 </View>
 
-                <View style={styles.flightArea}>
-                  <Text style={[styles.multiplierText, gameState.status === "LOST" ? styles.multiplierLost : styles.multiplierActive]}>
+                <View style={[styles.flightArea, isPhone && styles.flightAreaPhone]}>
+                  <Text style={[styles.multiplierText, isPhone && styles.multiplierTextPhone, gameState.status === "LOST" ? styles.multiplierLost : styles.multiplierActive]}>
                     x{displayedMultiplier.toFixed(2)}
                   </Text>
 
@@ -519,9 +503,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
+  pagePhone: {
+    padding: 10,
+  },
   layout: {
     flexDirection: "column",
     gap: 14,
+  },
+  layoutPhone: {
+    flexDirection: "column-reverse",
   },
   layoutWide: {
     flexDirection: "row",
@@ -535,11 +525,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1c2738",
   },
+  sidebarPhone: {
+    padding: 8,
+    gap: 8,
+  },
   sidebarWide: {
     width: 360,
   },
   betPanel: {
     gap: 10,
+  },
+  betPanelPhone: {
+    gap: 8,
   },
   panelHeaderRow: {
     flexDirection: "row",
@@ -550,6 +547,9 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
     fontSize: 28,
     fontWeight: "700",
+  },
+  panelTitlePhone: {
+    fontSize: 20,
   },
   panelMeta: {
     color: "#8fa0b8",
@@ -572,6 +572,9 @@ const styles = StyleSheet.create({
     height: 54,
     gap: 8,
   },
+  inputWrapPhone: {
+    height: 44,
+  },
   inputPrefix: {
     color: "#cde0ff",
     fontSize: 18,
@@ -584,6 +587,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingVertical: 0,
   },
+  textInputPhone: {
+    fontSize: 16,
+  },
   errorText: {
     color: "#f87171",
     fontSize: 14,
@@ -592,12 +598,18 @@ const styles = StyleSheet.create({
   actionsStack: {
     gap: 10,
   },
+  actionsStackPhone: {
+    gap: 8,
+  },
   ctaButton: {
     height: 60,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#7a17ff",
+  },
+  ctaButtonPhone: {
+    height: 46,
   },
   ctaButtonDisabled: {
     opacity: 0.45,
@@ -606,6 +618,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 24,
     fontWeight: "800",
+  },
+  ctaButtonTextPhone: {
+    fontSize: 17,
   },
   cashoutButton: {
     height: 56,
@@ -616,10 +631,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#22c55e",
   },
+  cashoutButtonPhone: {
+    height: 46,
+  },
   cashoutButtonText: {
     color: "#dcfce7",
     fontSize: 20,
     fontWeight: "900",
+  },
+  cashoutButtonTextPhone: {
+    fontSize: 14,
   },
   inGamePill: {
     height: 48,
@@ -644,6 +665,10 @@ const styles = StyleSheet.create({
     padding: 18,
     minHeight: 560,
   },
+  tableAreaPhone: {
+    padding: 10,
+    minHeight: 500,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -655,6 +680,9 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+  tableTitlePhone: {
+    fontSize: 20,
   },
   emptyState: {
     flex: 1,
@@ -691,6 +719,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
+  infoBarPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
   infoLabel: {
     color: "#89a0c6",
     fontSize: 12,
@@ -713,11 +745,18 @@ const styles = StyleSheet.create({
     minHeight: 320,
     justifyContent: "space-between",
   },
+  flightAreaPhone: {
+    padding: 12,
+    minHeight: 280,
+  },
   multiplierText: {
     fontSize: 54,
     fontWeight: "900",
     textAlign: "center",
     letterSpacing: 1.2,
+  },
+  multiplierTextPhone: {
+    fontSize: 42,
   },
   multiplierActive: {
     color: "#60a5fa",

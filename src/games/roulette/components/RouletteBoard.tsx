@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { rouletteTheme } from "../assets/theme";
 import { RED_NUMBERS, RouletteBet, RouletteBetInput, getBetKey } from "../utils/payouts";
 
@@ -121,6 +121,9 @@ function BetCell({
 }
 
 function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
+  const { width } = useWindowDimensions();
+  const isPhone = width < 430;
+
   const amountByBet = useMemo(() => {
     const map: Record<string, number> = {};
     bets.forEach((bet) => {
@@ -133,11 +136,11 @@ function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
   const getAmount = (bet: RouletteBetInput) => amountByBet[getBetKey(bet)] ?? 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isPhone && styles.containerPhone]}>
       <Text style={styles.sectionTitle}>Table de mises</Text>
 
-      <View style={styles.mainBoard}>
-        <View style={styles.zeroColumn}>
+      <View style={[styles.mainBoard, isPhone && styles.mainBoardPhone]}>
+        <View style={[styles.zeroColumn, isPhone && styles.zeroColumnPhone]}>
           <NumberCell
             number={0}
             amount={getAmount({ kind: "single", number: 0 })}
@@ -146,9 +149,9 @@ function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
           />
         </View>
 
-        <View style={styles.gridArea}>
+        <View style={[styles.gridArea, isPhone && styles.gridAreaPhone]}>
           {BOARD_ROWS.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.gridRow}>
+            <View key={`row-${rowIndex}`} style={[styles.gridRow, isPhone && styles.gridRowPhone]}>
               {row.map((number) => (
                 <NumberCell
                   key={number}
@@ -163,7 +166,7 @@ function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
         </View>
       </View>
 
-      <View style={styles.outsideRows}>
+      <View style={[styles.outsideRows, isPhone && styles.outsideRowsPhone]}>
         <BetCell
           label="1-18"
           amount={getAmount({ kind: "evenChance", chanceType: "low" })}
@@ -202,7 +205,7 @@ function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
         />
       </View>
 
-      <View style={styles.outsideRows}>
+      <View style={[styles.outsideRows, isPhone && styles.outsideRowsPhone]}>
         <BetCell
           label="1ère 12"
           amount={getAmount({ kind: "dozen", dozen: 1 })}
@@ -242,7 +245,7 @@ function RawRouletteBoard({ bets, disabled, onPlaceBet }: RouletteBoardProps) {
       </View>
 
       <Text style={styles.advancedTitle}>Paris avancés</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.advancedRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.advancedRow, isPhone && styles.advancedRowPhone]}>
         {SPLITS.map((pair) => {
           const bet: RouletteBetInput = { kind: "split", numbers: pair };
           return (
@@ -293,6 +296,10 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
   },
+  containerPhone: {
+    padding: 8,
+    gap: 6,
+  },
   sectionTitle: {
     color: rouletteTheme.colors.textPrimary,
     fontWeight: "900",
@@ -303,16 +310,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
   },
+  mainBoardPhone: {
+    gap: 4,
+  },
   zeroColumn: {
     width: 46,
+  },
+  zeroColumnPhone: {
+    width: 38,
   },
   gridArea: {
     flex: 1,
     gap: 6,
   },
+  gridAreaPhone: {
+    gap: 4,
+  },
   gridRow: {
     flexDirection: "row",
     gap: 6,
+  },
+  gridRowPhone: {
+    gap: 4,
   },
   numberCell: {
     flex: 1,
@@ -370,6 +389,9 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: "wrap",
   },
+  outsideRowsPhone: {
+    gap: 4,
+  },
   betCell: {
     flex: 1,
     minWidth: 80,
@@ -402,6 +424,9 @@ const styles = StyleSheet.create({
   advancedRow: {
     gap: 6,
     paddingRight: 6,
+  },
+  advancedRowPhone: {
+    gap: 4,
   },
   advancedCell: {
     width: 132,

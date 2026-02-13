@@ -13,6 +13,20 @@ const clearAllTimeouts = (timeouts: Array<ReturnType<typeof setTimeout>>) => {
   timeouts.length = 0;
 };
 
+const areNumberArraysEqual = (left: number[], right: number[]) => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 export default function useSequentialDeal(
   sessionId: string | undefined,
   dealerHand: unknown[],
@@ -64,13 +78,21 @@ export default function useSequentialDeal(
       dealerCountRef.current = 0;
       playerCountsRef.current = [...currentPlayerCounts];
       setVisibleDealerCount(0);
-      setVisiblePlayerCounts(currentPlayerCounts);
+      setVisiblePlayerCounts((previous) => (
+        areNumberArraysEqual(previous, currentPlayerCounts)
+          ? previous
+          : currentPlayerCounts
+      ));
     }
 
     if (currentPlayerCounts.length !== targetPlayerCounts.length) {
       currentPlayerCounts = targetPlayerCounts.map((_, index) => currentPlayerCounts[index] ?? 0);
       playerCountsRef.current = [...currentPlayerCounts];
-      setVisiblePlayerCounts(currentPlayerCounts);
+      setVisiblePlayerCounts((previous) => (
+        areNumberArraysEqual(previous, currentPlayerCounts)
+          ? previous
+          : currentPlayerCounts
+      ));
     }
 
     const hasDecrease =
@@ -81,7 +103,11 @@ export default function useSequentialDeal(
       dealerCountRef.current = targetDealerCount;
       playerCountsRef.current = [...targetPlayerCounts];
       setVisibleDealerCount(targetDealerCount);
-      setVisiblePlayerCounts(targetPlayerCounts);
+      setVisiblePlayerCounts((previous) => (
+        areNumberArraysEqual(previous, targetPlayerCounts)
+          ? previous
+          : targetPlayerCounts
+      ));
       return;
     }
 

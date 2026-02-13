@@ -3,16 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
+import { authStorage } from "@/src/services/authStorage";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
 type Card = {
@@ -37,8 +39,6 @@ type HandScore = {
   tiebreak: number[];
 };
 
-const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 const REQUEST_TIMEOUT_MS = 9000;
 const TURN_SECONDS = 12;
 const STREETS = ["Pré-flop", "Flop", "Turn", "River", "Showdown"] as const;
@@ -54,18 +54,6 @@ const HAND_NAMES = [
   "Carré",
   "Quinte flush",
 ];
-
-const getApiBaseUrls = (): string[] => {
-  if (API_BASE_URL) {
-    return [API_BASE_URL];
-  }
-
-  if (Platform.OS === "android") {
-    return ["http://10.0.2.2:3000/api", "http://localhost:3000/api", "http://127.0.0.1:3000/api"];
-  }
-
-  return ["http://localhost:3000/api", "http://127.0.0.1:3000/api"];
-};
 
 const newDeck = (): Card[] => {
   const suits: Card["suit"][] = ["♠", "♥", "♦", "♣"];
@@ -108,7 +96,8 @@ const randomInt = (min: number, max: number): number => {
 export default function PokerScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
+  const { width } = useWindowDimensions();
+  const isPhone = width < 430;
 
   const [lobbyAiCount, setLobbyAiCount] = useState(5);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -204,6 +193,11 @@ export default function PokerScreen() {
 
   const apiCall = useCallback(async (path: string, payload?: Record<string, unknown>) => {
     const baseUrls = getApiBaseUrls();
+    const token = await authStorage.getToken();
+
+    if (!token) {
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
+    }
 
     for (const baseUrl of baseUrls) {
       const controller = new AbortController();
@@ -212,7 +206,10 @@ export default function PokerScreen() {
       try {
         const response = await fetch(`${baseUrl}${path}`, {
           method: payload ? "POST" : "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: payload ? JSON.stringify(payload) : undefined,
           signal: controller.signal,
         });
@@ -233,38 +230,30 @@ export default function PokerScreen() {
   }, []);
 
   const persistDelta = useCallback(async (delta: number) => {
-    if (!resolvedUserId || delta === 0) {
+    if (delta === 0) {
       return;
     }
 
     setSyncing(true);
     try {
-      await apiCall("/games/poker/settle", {
-        userId: resolvedUserId,
-        amount: delta,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erreur de synchronisation poker.";
-      Alert.alert("Sync Poker", message);
+      setStatusText("Mode sécurisé: synchronisation poker distante désactivée.");
     } finally {
       setSyncing(false);
     }
-  }, [apiCall, resolvedUserId]);
+  }, []);
 
   const startTable = useCallback(async () => {
     try {
       setLoading(true);
 
       let startingChips = 3000;
-      if (resolvedUserId) {
-        try {
-          const balance = await apiCall(`/users/balance?userId=${encodeURIComponent(resolvedUserId)}`) as { chipBalance?: number };
-          if (typeof balance.chipBalance === "number") {
-            startingChips = Math.max(0, Math.floor(balance.chipBalance));
-          }
-        } catch {
-          setStatusText("API indisponible: démarrage en mode local avec solde temporaire.");
+      try {
+        const balance = await apiCall("/users/balance") as { chipBalance?: number };
+        if (typeof balance.chipBalance === "number") {
+          startingChips = Math.max(0, Math.floor(balance.chipBalance));
         }
+      } catch {
+        setStatusText("API indisponible: démarrage en mode local avec solde temporaire.");
       }
 
       const tablePlayers: Player[] = [];
@@ -304,7 +293,7 @@ export default function PokerScreen() {
     } finally {
       setLoading(false);
     }
-  }, [apiCall, lobbyAiCount, resolvedUserId]);
+  }, [apiCall, lobbyAiCount]);
 
   const launchNewHand = useCallback((basePlayers: Player[], nextHandNumber: number) => {
     clearTurnTimers();
@@ -741,10 +730,10 @@ export default function PokerScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {!started ? (
-        <View style={styles.lobbyWrap}>
-          <View style={styles.lobbyCard}>
+        <View style={[styles.lobbyWrap, isPhone && styles.lobbyWrapPhone]}>
+          <View style={[styles.lobbyCard, isPhone && styles.lobbyCardPhone]}>
             <Text style={styles.lobbyTag}>PREMIUM TABLE</Text>
-            <Text style={styles.lobbyTitle}>Texas Hold'em Pro</Text>
+            <Text style={[styles.lobbyTitle, isPhone && styles.lobbyTitlePhone]}>Texas Hold'em Pro</Text>
             <Text style={styles.lobbySubtitle}>Choisissez le nombre d'adversaires IA puis asseyez-vous à la table.</Text>
 
             <View style={styles.aiRow}>
@@ -757,24 +746,24 @@ export default function PokerScreen() {
               </Pressable>
             </View>
 
-            <Pressable style={styles.ctaButton} onPress={startTable} disabled={loading}>
+            <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={startTable} disabled={loading}>
               {loading ? <ActivityIndicator color="#24180b" /> : <Text style={styles.ctaText}>S'ASSEOIR À LA TABLE</Text>}
             </Pressable>
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.headerBar}>
+        <ScrollView contentContainerStyle={[styles.content, isPhone && styles.contentPhone]}>
+          <View style={[styles.headerBar, isPhone && styles.headerBarPhone]}>
             <View>
-              <Text style={styles.headerTitle}>Texas Hold'em Pro</Text>
+              <Text style={[styles.headerTitle, isPhone && styles.headerTitlePhone]}>Texas Hold'em Pro</Text>
               <Text style={styles.headerSubtitle}>{`Main #${handNumber} · ${STREETS[phase]}`}</Text>
             </View>
-            <ChipBalanceBadge userId={resolvedUserId} amount={user?.chips} compact />
+            <ChipBalanceBadge userId={routeUserId} amount={user?.chips} compact />
           </View>
 
-          <View style={styles.tableWrap}>
+          <View style={[styles.tableWrap, isPhone && styles.tableWrapPhone]}>
             <View style={styles.felt} />
-            <View style={styles.boardWrap}>
+            <View style={[styles.boardWrap, isPhone && styles.boardWrapPhone]}>
               <Text style={styles.potLabel}>Pot total</Text>
               <Text style={styles.potValue}>{pot}</Text>
               <View style={styles.boardCards}>
@@ -789,7 +778,9 @@ export default function PokerScreen() {
                 key={seat.player.id}
                 style={[
                   styles.seat,
+                  isPhone && styles.seatPhone,
                   seat.player.isUser ? styles.userSeat : null,
+                  seat.player.isUser && isPhone ? styles.userSeatPhone : null,
                   activePlayerId === seat.player.id ? styles.seatActive : null,
                   { left: seat.left, top: seat.top },
                 ]}
@@ -813,18 +804,18 @@ export default function PokerScreen() {
                   </View>
                 ) : null}
                 <View style={styles.holeCards}>
-                  {renderCard(seat.player.cards[0], !seat.player.isUser && phase < 4, seat.player.isUser)}
-                  {renderCard(seat.player.cards[1], !seat.player.isUser && phase < 4, seat.player.isUser)}
+                  {renderCard(seat.player.cards[0], !seat.player.isUser && phase < 4, seat.player.isUser && !isPhone)}
+                  {renderCard(seat.player.cards[1], !seat.player.isUser && phase < 4, seat.player.isUser && !isPhone)}
                 </View>
                 {seat.player.isUser ? <Text style={styles.userBetText}>{`Mise: ${seat.player.bet}`}</Text> : null}
               </View>
             ))}
           </View>
 
-          <View style={styles.actionBar}>
+          <View style={[styles.actionBar, isPhone && styles.actionBarPhone]}>
             <Text style={styles.statusText}>{statusText}</Text>
 
-            <View style={styles.actionsRow}>
+            <View style={[styles.actionsRow, isPhone && styles.actionsRowPhone]}>
               <Pressable
                 style={[styles.actionBtn, styles.foldBtn, !canAct ? styles.disabledBtn : null]}
                 onPress={() => applyUserAction("FOLD")}
@@ -848,7 +839,7 @@ export default function PokerScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.raiseControlRow}>
+            <View style={[styles.raiseControlRow, isPhone && styles.raiseControlRowPhone]}>
               <Pressable
                 style={styles.stepBtn}
                 onPress={() => setRaiseTo((value) => Math.max(currentBet + 40, value - 20))}
@@ -867,7 +858,7 @@ export default function PokerScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.metaRow}>
+            <View style={[styles.metaRow, isPhone && styles.metaRowPhone]}>
               <Text style={styles.turnMetaText}>
                 {activePlayerId !== null
                   ? `${players.find((player) => player.id === activePlayerId)?.name ?? "Joueur"} • ${turnSecondsLeft}s`
@@ -980,6 +971,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 18,
   },
+  lobbyWrapPhone: {
+    padding: 12,
+  },
   lobbyCard: {
     width: "100%",
     maxWidth: 760,
@@ -989,6 +983,9 @@ const styles = StyleSheet.create({
     backgroundColor: casinoTheme.colors.panel,
     padding: 20,
     gap: 12,
+  },
+  lobbyCardPhone: {
+    padding: 16,
   },
   lobbyTag: {
     color: casinoTheme.colors.gold,
@@ -1000,6 +997,9 @@ const styles = StyleSheet.create({
     color: casinoTheme.colors.text,
     fontSize: 34,
     fontWeight: "900",
+  },
+  lobbyTitlePhone: {
+    fontSize: 28,
   },
   lobbySubtitle: {
     color: casinoTheme.colors.textMuted,
@@ -1043,6 +1043,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
   },
+  ctaButtonPhone: {
+    marginTop: 6,
+  },
   ctaText: {
     color: "#29190b",
     fontWeight: "900",
@@ -1054,6 +1057,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 30,
   },
+  contentPhone: {
+    padding: 10,
+    gap: 10,
+  },
   headerBar: {
     paddingHorizontal: 4,
     paddingVertical: 2,
@@ -1061,10 +1068,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerBarPhone: {
+    paddingHorizontal: 0,
+  },
   headerTitle: {
     color: casinoTheme.colors.text,
     fontWeight: "900",
     fontSize: 19,
+  },
+  headerTitlePhone: {
+    fontSize: 17,
   },
   headerSubtitle: {
     color: casinoTheme.colors.textMuted,
@@ -1079,6 +1092,10 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     backgroundColor: "#1a2230",
     position: "relative",
+  },
+  tableWrapPhone: {
+    height: 520,
+    borderRadius: 20,
   },
   felt: {
     position: "absolute",
@@ -1104,6 +1121,11 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: "center",
     gap: 6,
+  },
+  boardWrapPhone: {
+    width: 250,
+    transform: [{ translateX: -125 }, { translateY: -60 }],
+    padding: 8,
   },
   potLabel: {
     color: casinoTheme.colors.textMuted,
@@ -1134,9 +1156,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     gap: 3,
   },
+  seatPhone: {
+    transform: [{ translateX: -62 }, { translateY: -42 }],
+    width: 124,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+  },
   userSeat: {
     transform: [{ translateX: -92 }, { translateY: -50 }],
     width: 184,
+  },
+  userSeatPhone: {
+    transform: [{ translateX: -72 }, { translateY: -42 }],
+    width: 144,
   },
   seatPlate: {
     width: "100%",
@@ -1246,6 +1278,10 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
+  actionBarPhone: {
+    padding: 10,
+    gap: 8,
+  },
   statusText: {
     color: casinoTheme.colors.textMuted,
     fontWeight: "700",
@@ -1254,6 +1290,9 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  actionsRowPhone: {
+    flexDirection: "column",
   },
   actionBtn: {
     flex: 1,
@@ -1293,6 +1332,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: withAlpha(casinoTheme.colors.bgAlt, 0.65),
   },
+  raiseControlRowPhone: {
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+  },
   stepBtn: {
     width: 30,
     height: 30,
@@ -1323,6 +1366,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  metaRowPhone: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4,
   },
   turnMetaText: {
     color: casinoTheme.colors.cyan,

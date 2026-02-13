@@ -15,8 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const payload = await window.CasinoApi.loginPlayer({ email, password });
-      localStorage.setItem("casino_token", payload.token);
-      localStorage.setItem("casino_user", JSON.stringify(payload.user));
+      sessionStorage.setItem("casino_token", payload.token);
+      sessionStorage.setItem("casino_user", JSON.stringify(payload.user));
 
       message.textContent = "Connexion réussie. Redirection...";
       message.className = "message ok";

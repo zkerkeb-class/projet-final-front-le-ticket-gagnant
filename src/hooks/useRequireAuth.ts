@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import { authStorage } from "@/src/services/authStorage";
@@ -7,9 +7,15 @@ import { authStorage } from "@/src/services/authStorage";
 export const useRequireAuth = (): boolean => {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const guardInProgressRef = useRef(false);
 
   useEffect(() => {
+    if (ready || guardInProgressRef.current) {
+      return;
+    }
+
     let mounted = true;
+    guardInProgressRef.current = true;
 
     const guard = async () => {
       try {
@@ -27,6 +33,8 @@ export const useRequireAuth = (): boolean => {
       } catch {
         Alert.alert("Session invalide", "Impossible de vérifier la session. Reconnectez-vous.");
         router.replace("/login");
+      } finally {
+        guardInProgressRef.current = false;
       }
     };
 
@@ -35,7 +43,7 @@ export const useRequireAuth = (): boolean => {
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [ready, router]);
 
   return ready;
 };

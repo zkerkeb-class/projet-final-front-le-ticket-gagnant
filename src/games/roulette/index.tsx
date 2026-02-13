@@ -50,6 +50,7 @@ export default function RouletteGame() {
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
+  const isPhone = width < 430;
 
   const {
     bankroll,
@@ -58,6 +59,7 @@ export default function RouletteGame() {
     totalStake,
     spinning,
     result,
+    spinTargetResult,
     history,
     lastSpin,
     setSelectedChip,
@@ -65,7 +67,6 @@ export default function RouletteGame() {
     clearBets,
     doubleBets,
     spinWheel,
-    onResultGenerated,
   } = useRouletteGame(1000);
 
   const feedbackOpacity = useRef(new Animated.Value(0)).current;
@@ -112,16 +113,16 @@ export default function RouletteGame() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.layout, isWide && styles.layoutWide]}>
-          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
-            <View style={styles.betPanel}>
+      <ScrollView contentContainerStyle={[styles.page, isPhone && styles.pagePhone]}>
+        <View style={[styles.layout, isPhone && styles.layoutPhone, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide, isPhone && styles.sidebarPhone]}>
+            <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
               <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Roulette</Text>
+                <Text style={[styles.panelTitle, isPhone && styles.panelTitlePhone]}>Roulette</Text>
                 <Text style={styles.panelMeta}>European</Text>
               </View>
 
-              <View style={styles.infoBar}>
+              <View style={[styles.infoBar, isPhone && styles.infoBarPhone]}>
                 <View style={styles.infoBlock}>
                   <Text style={styles.infoLabel}>Mise totale</Text>
                   <Text style={styles.infoValue}>{totalStake}</Text>
@@ -136,7 +137,7 @@ export default function RouletteGame() {
               <ChipSelector chips={DEFAULT_CHIPS} selectedChip={selectedChip} onSelect={setSelectedChip} />
             </View>
 
-            <View style={styles.actionsStack}>
+            <View style={[styles.actionsStack, isPhone && styles.actionsStackPhone]}>
               <NeonButton
                 label="Lancer"
                 onPress={spinWheel}
@@ -161,16 +162,18 @@ export default function RouletteGame() {
             </View>
           </View>
 
-          <View style={styles.tableArea}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={styles.tableTitle}>ROULETTE</Text>
-              <ChipBalanceBadge userId={routeUserId} amount={bankroll} compact />
-            </View>
+          <View style={[styles.tableArea, isPhone && styles.tableAreaPhone]}>
+            {!isPhone ? (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableTitle}>ROULETTE</Text>
+                <ChipBalanceBadge userId={routeUserId} amount={bankroll} compact />
+              </View>
+            ) : null}
 
-            <View style={styles.tableContent}>
-              <RouletteWheel spinning={spinning} result={result} onResultGenerated={onResultGenerated} />
+            <View style={[styles.tableContent, isPhone && styles.tableContentPhone]}>
+              <RouletteWheel spinning={spinning} result={spinning ? spinTargetResult : result} />
 
-              <View style={styles.statsRow}>
+              <View style={[styles.statsRow, isPhone && styles.statsRowPhone]}>
                 <View style={styles.statPill}>
                   <Text style={styles.statLabel}>SOLDE</Text>
                   <Text style={styles.statValue}>{bankroll}</Text>
@@ -218,9 +221,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
+  pagePhone: {
+    padding: 10,
+  },
   layout: {
     flexDirection: "column",
     gap: 14,
+  },
+  layoutPhone: {
+    flexDirection: "column-reverse",
   },
   layoutWide: {
     flexDirection: "row",
@@ -234,11 +243,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: rouletteTheme.colors.panelBorder,
   },
+  sidebarPhone: {
+    padding: 8,
+    gap: 8,
+  },
   sidebarWide: {
     width: 360,
   },
   betPanel: {
     gap: 10,
+  },
+  betPanelPhone: {
+    gap: 8,
   },
   panelHeaderRow: {
     flexDirection: "row",
@@ -249,6 +265,9 @@ const styles = StyleSheet.create({
     color: rouletteTheme.colors.textPrimary,
     fontSize: 28,
     fontWeight: "700",
+  },
+  panelTitlePhone: {
+    fontSize: 20,
   },
   panelMeta: {
     color: rouletteTheme.colors.textSecondary,
@@ -264,6 +283,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     paddingHorizontal: 12,
+  },
+  infoBarPhone: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   infoBlock: {
     gap: 3,
@@ -286,6 +309,9 @@ const styles = StyleSheet.create({
   actionsStack: {
     gap: 10,
   },
+  actionsStackPhone: {
+    gap: 8,
+  },
   inGamePill: {
     borderWidth: 1,
     borderColor: rouletteTheme.colors.panelBorder,
@@ -307,6 +333,10 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
+  tableAreaPhone: {
+    padding: 8,
+    gap: 8,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -318,12 +348,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.8,
   },
+  tableTitlePhone: {
+    fontSize: 20,
+  },
   tableContent: {
     gap: 10,
+  },
+  tableContentPhone: {
+    gap: 8,
   },
   statsRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  statsRowPhone: {
+    gap: 6,
   },
   statPill: {
     flex: 1,

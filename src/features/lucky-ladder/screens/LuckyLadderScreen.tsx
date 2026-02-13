@@ -5,7 +5,6 @@ import {
     Alert,
     Animated,
     Easing,
-    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -17,6 +16,8 @@ import {
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
+import { authStorage } from "@/src/services/authStorage";
 
 type LadderStatus = "ACTIVE" | "LOST" | "CASHED_OUT" | "WON";
 
@@ -39,8 +40,6 @@ type LadderApiState = {
   history: number[];
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
 const LADDER_BOARD_HEIGHT = 188;
 const STEP_NODE_HEIGHT = 12;
 const PLAYER_WIDTH = 26;
@@ -50,25 +49,6 @@ const parsePositive = (value: string): number => {
   const normalized = value.replace(/\s+/g, "").replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : Number.NaN;
-};
-
-const getApiBaseUrls = (): string[] => {
-  if (API_BASE_URL) {
-    return [API_BASE_URL.replace(/\/games\/blackjack\/?$/, "/games/lucky-ladder")];
-  }
-
-  if (Platform.OS === "android") {
-    return [
-      "http://10.0.2.2:3000/api/games/lucky-ladder",
-      "http://localhost:3000/api/games/lucky-ladder",
-      "http://127.0.0.1:3000/api/games/lucky-ladder",
-    ];
-  }
-
-  return [
-    "http://localhost:3000/api/games/lucky-ladder",
-    "http://127.0.0.1:3000/api/games/lucky-ladder",
-  ];
 };
 
 const statusLabel: Record<Exclude<LadderStatus, "ACTIVE">, string> = {
@@ -88,9 +68,9 @@ const getStatusLabel = (status: LadderStatus): string => {
 export default function LuckyLadderScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
   const { width } = useWindowDimensions();
   const isWide = width >= 980;
+  const isPhone = width < 430;
 
   const [betInput, setBetInput] = useState("20");
   const [gameState, setGameState] = useState<LadderApiState | null>(null);
@@ -158,8 +138,13 @@ export default function LuckyLadderScreen() {
     path: "/start" | "/state" | "/climb" | "/cashout",
     payload?: Record<string, unknown>,
   ) => {
-    const baseUrls = getApiBaseUrls();
+    const baseUrls = getApiBaseUrls("games/lucky-ladder");
     let lastError: Error | null = null;
+    const token = await authStorage.getToken();
+
+    if (!token) {
+      throw new Error("Session expirée. Veuillez vous reconnecter.");
+    }
 
     for (const baseUrl of baseUrls) {
       try {
@@ -167,6 +152,7 @@ export default function LuckyLadderScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload ?? {}),
         });
@@ -242,7 +228,6 @@ export default function LuckyLadderScreen() {
       setErrorMessage(null);
 
       const state = await apiCall("/start", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount: bet,
       });
 
@@ -267,7 +252,6 @@ export default function LuckyLadderScreen() {
     try {
       setLoading(true);
       const state = await apiCall("/climb", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(state);
@@ -292,7 +276,6 @@ export default function LuckyLadderScreen() {
     try {
       setLoading(true);
       const state = await apiCall("/cashout", {
-        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         sessionId: gameState.sessionId,
       });
       setGameState(state);
@@ -324,53 +307,75 @@ export default function LuckyLadderScreen() {
     outputRange: ["0deg", "95deg"],
   });
 
+  const renderBetPanel = () => (
+    <View style={[styles.betPanel, isPhone && styles.betPanelPhone]}>
+      <View style={styles.panelHeaderRow}>
+        <Text style={[styles.panelTitle, isPhone && styles.panelTitlePhone]}>Lucky Ladder</Text>
+        <Text style={styles.panelMeta}>Sommet x∞</Text>
+      </View>
+
+      <Text style={styles.inputLabel}>Mise</Text>
+      <View style={[styles.inputWrap, isPhone && styles.inputWrapPhone]}>
+        <Text style={styles.inputPrefix}>€</Text>
+        <TextInput
+          style={[styles.textInput, isPhone && styles.textInputPhone]}
+          keyboardType="numeric"
+          value={betInput}
+          onChangeText={setBetInput}
+          placeholder="20"
+          placeholderTextColor="#7f8899"
+        />
+      </View>
+    </View>
+  );
+
+  const renderHistory = (phoneBottom = false) => (
+    <View style={[styles.historyRow, phoneBottom ? styles.historyRowPhoneBottom : null]}>
+      <Text style={styles.historyLabel}>Historique</Text>
+      <View style={styles.historyChips}>
+        {history.length === 0
+          ? <Text style={styles.historyEmpty}>--</Text>
+          : history.map((value, index) => (
+            <View
+              key={`h-${index}`}
+              style={[styles.historyChip, value > 0 ? styles.historyChipHigh : styles.historyChipLow]}
+            >
+              <Text style={styles.historyChipText}>{value > 0 ? `x${value.toFixed(2)}` : "💥"}</Text>
+            </View>
+          ))}
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.layout, isWide && styles.layoutWide]}>
-          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
-            <View style={styles.betPanel}>
-              <View style={styles.panelHeaderRow}>
-                <Text style={styles.panelTitle}>Lucky Ladder</Text>
-                <Text style={styles.panelMeta}>Sommet x∞</Text>
-              </View>
-
-              <Text style={styles.inputLabel}>Mise</Text>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputPrefix}>€</Text>
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="numeric"
-                  value={betInput}
-                  onChangeText={setBetInput}
-                  placeholder="20"
-                  placeholderTextColor="#7f8899"
-                />
-              </View>
-            </View>
+      <ScrollView contentContainerStyle={[styles.page, isPhone && styles.pagePhone]}>
+        <View style={[styles.layout, isPhone && styles.layoutPhone, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide, isPhone && styles.sidebarPhone]}>
+            {!(isPhone && isActiveSession) ? renderBetPanel() : null}
 
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
             {!gameState ? (
               <Pressable
-                style={[styles.ctaButton, (!canStart || loading) && styles.ctaButtonDisabled]}
+                style={[styles.ctaButton, isPhone && styles.ctaButtonPhone, (!canStart || loading) && styles.ctaButtonDisabled]}
                 onPress={handleStart}
                 disabled={!canStart || loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaButtonText}>Démarrer</Text>}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Démarrer</Text>}
               </Pressable>
             ) : isActiveSession ? (
-              <View style={styles.actionsStack}>
+              <View style={[styles.actionsStack, isPhone && styles.actionsStackPhone]}>
                 <Pressable
-                  style={[styles.climbButton, loading && styles.ctaButtonDisabled]}
+                  style={[styles.climbButton, isPhone && styles.climbButtonPhone, loading && styles.ctaButtonDisabled]}
                   onPress={handleClimb}
                   disabled={loading || !gameState.availableActions.climb}
                 >
-                  <Text style={styles.climbButtonText}>Monter une marche</Text>
+                  <Text style={[styles.climbButtonText, isPhone && styles.climbButtonTextPhone]}>Monter une marche</Text>
                 </Pressable>
 
                 <Pressable
-                  style={[styles.cashoutButton, loading && styles.ctaButtonDisabled]}
+                  style={[styles.cashoutButton, isPhone && styles.cashoutButtonPhone, loading && styles.ctaButtonDisabled]}
                   onPress={handleCashout}
                   disabled={loading || !gameState.availableActions.cashout}
                 >
@@ -378,17 +383,21 @@ export default function LuckyLadderScreen() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={styles.ctaButton} onPress={handleReplay}>
-                <Text style={styles.ctaButtonText}>Rejouer</Text>
+              <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={handleReplay}>
+                <Text style={[styles.ctaButtonText, isPhone && styles.ctaButtonTextPhone]}>Rejouer</Text>
               </Pressable>
             )}
+
+            {isPhone && isActiveSession ? renderBetPanel() : null}
           </View>
 
-          <View style={styles.tableArea}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={styles.tableTitle}>LUCKY LADDER</Text>
-              <ChipBalanceBadge userId={resolvedUserId} amount={gameState?.chipBalance} compact />
-            </View>
+          <View style={[styles.tableArea, isPhone && styles.tableAreaPhone]}>
+            {!isPhone ? (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableTitle}>LUCKY LADDER</Text>
+                <ChipBalanceBadge userId={routeUserId} amount={gameState?.chipBalance} compact />
+              </View>
+            ) : null}
 
             {!gameState ? (
               <View style={styles.emptyState}>
@@ -396,8 +405,8 @@ export default function LuckyLadderScreen() {
                 <Text style={styles.emptyText}>Montez marche par marche et encaissez avant qu'une marche casse.</Text>
               </View>
             ) : (
-              <View style={styles.tableContent}>
-                <View style={styles.infoBar}>
+              <View style={[styles.tableContent, isPhone && styles.tableContentPhone]}>
+                <View style={[styles.infoBar, isPhone && styles.infoBarPhone]}>
                   <View>
                     <Text style={styles.infoLabel}>Marche</Text>
                     <Text style={styles.infoValue}>{gameState.currentStep}/{gameState.totalSteps}</Text>
@@ -412,9 +421,9 @@ export default function LuckyLadderScreen() {
                   </View>
                 </View>
 
-                <View style={styles.ladderArea}>
+                <View style={[styles.ladderArea, isPhone && styles.ladderAreaPhone]}>
                   <View
-                    style={styles.ladderBoard}
+                    style={[styles.ladderBoard, isPhone && styles.ladderBoardPhone]}
                     onLayout={(event) => {
                       const { width: boardWidth, height: boardHeight } = event.nativeEvent.layout;
                       if (boardWidth > 0 && boardHeight > 0) {
@@ -464,32 +473,20 @@ export default function LuckyLadderScreen() {
                     </Animated.View>
                   </View>
 
-                  <Text style={styles.statusText}>
+                  {!isPhone ? <Text style={styles.statusText}>
                     {gameState.status === "ACTIVE"
                       ? "Continuez pour augmenter le gain, ou encaissez maintenant."
                       : getStatusLabel(gameState.status)}
-                  </Text>
+                  </Text> : null}
                 </View>
 
-                <View style={styles.historyRow}>
-                  <Text style={styles.historyLabel}>Historique</Text>
-                  <View style={styles.historyChips}>
-                    {history.length === 0
-                      ? <Text style={styles.historyEmpty}>--</Text>
-                      : history.map((value, index) => (
-                        <View
-                          key={`h-${index}`}
-                          style={[styles.historyChip, value > 0 ? styles.historyChipHigh : styles.historyChipLow]}
-                        >
-                          <Text style={styles.historyChipText}>{value > 0 ? `x${value.toFixed(2)}` : "💥"}</Text>
-                        </View>
-                      ))}
-                  </View>
-                </View>
+                {!isPhone ? renderHistory() : null}
               </View>
             )}
           </View>
         </View>
+
+        {isPhone && gameState ? renderHistory(true) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -504,9 +501,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 14,
   },
+  pagePhone: {
+    padding: 10,
+  },
   layout: {
     flexDirection: "column",
     gap: 14,
+  },
+  layoutPhone: {
+    flexDirection: "column-reverse",
   },
   layoutWide: {
     flexDirection: "row",
@@ -520,11 +523,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1c2738",
   },
+  sidebarPhone: {
+    padding: 8,
+    gap: 8,
+  },
   sidebarWide: {
     width: 360,
   },
   betPanel: {
     gap: 10,
+  },
+  betPanelPhone: {
+    gap: 8,
   },
   panelHeaderRow: {
     flexDirection: "row",
@@ -535,6 +545,9 @@ const styles = StyleSheet.create({
     color: "#f3f4f6",
     fontSize: 28,
     fontWeight: "700",
+  },
+  panelTitlePhone: {
+    fontSize: 20,
   },
   panelMeta: {
     color: "#8fa0b8",
@@ -557,6 +570,9 @@ const styles = StyleSheet.create({
     height: 54,
     gap: 8,
   },
+  inputWrapPhone: {
+    height: 44,
+  },
   inputPrefix: {
     color: "#cde0ff",
     fontSize: 18,
@@ -569,6 +585,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingVertical: 0,
   },
+  textInputPhone: {
+    fontSize: 16,
+  },
   errorText: {
     color: "#f87171",
     fontSize: 14,
@@ -577,12 +596,18 @@ const styles = StyleSheet.create({
   actionsStack: {
     gap: 10,
   },
+  actionsStackPhone: {
+    gap: 8,
+  },
   ctaButton: {
     height: 60,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#7a17ff",
+  },
+  ctaButtonPhone: {
+    height: 46,
   },
   ctaButtonDisabled: {
     opacity: 0.45,
@@ -591,6 +616,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 24,
     fontWeight: "800",
+  },
+  ctaButtonTextPhone: {
+    fontSize: 17,
   },
   climbButton: {
     height: 56,
@@ -601,10 +629,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#14b8a6",
   },
+  climbButtonPhone: {
+    height: 46,
+  },
   climbButtonText: {
     color: "#ccfbf1",
     fontSize: 19,
     fontWeight: "900",
+  },
+  climbButtonTextPhone: {
+    fontSize: 15,
   },
   cashoutButton: {
     height: 52,
@@ -614,6 +648,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#14532d",
     borderWidth: 1,
     borderColor: "#22c55e",
+  },
+  cashoutButtonPhone: {
+    height: 44,
   },
   cashoutButtonText: {
     color: "#dcfce7",
@@ -629,6 +666,10 @@ const styles = StyleSheet.create({
     padding: 18,
     minHeight: 560,
   },
+  tableAreaPhone: {
+    padding: 10,
+    minHeight: 500,
+  },
   tableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -640,6 +681,9 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+  tableTitlePhone: {
+    fontSize: 20,
   },
   emptyState: {
     flex: 1,
@@ -666,6 +710,9 @@ const styles = StyleSheet.create({
   tableContent: {
     gap: 14,
   },
+  tableContentPhone: {
+    flex: 1,
+  },
   infoBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -675,6 +722,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(17, 26, 42, 0.78)",
     paddingVertical: 12,
     paddingHorizontal: 14,
+  },
+  infoBarPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   infoLabel: {
     color: "#89a0c6",
@@ -697,6 +748,12 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 360,
   },
+  ladderAreaPhone: {
+    flex: 1,
+    minHeight: 0,
+    padding: 10,
+    gap: 0,
+  },
   ladderBoard: {
     width: "100%",
     height: 280,
@@ -705,6 +762,10 @@ const styles = StyleSheet.create({
     borderColor: "#2a4268",
     backgroundColor: "rgba(8, 16, 30, 0.92)",
     overflow: "hidden",
+  },
+  ladderBoardPhone: {
+    flex: 1,
+    height: "100%",
   },
   ladderGlow: {
     position: "absolute",
@@ -790,6 +851,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(21, 30, 48, 0.85)",
     padding: 12,
     gap: 8,
+  },
+  historyRowPhoneBottom: {
+    marginTop: 14,
   },
   historyLabel: {
     color: "#f8fafc",

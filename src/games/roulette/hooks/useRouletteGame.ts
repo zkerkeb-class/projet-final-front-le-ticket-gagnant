@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { authStorage } from "@/src/services/authStorage";
+import { getApiBaseUrls } from "@/src/services/apiBaseUrl";
 import {
     calculateTotalReturn,
     calculateTotalStake,
@@ -9,7 +11,6 @@ import {
 
 export const DEFAULT_CHIPS = [1, 5, 10, 25, 100] as const;
 const HISTORY_LIMIT = 10;
-const API_BASE_URL = "http://localhost:3000/api";
 
 type SpinApiResponse = {
   data?: {
@@ -17,7 +18,7 @@ type SpinApiResponse = {
     totalStake: number;
     totalReturn: number;
     net: number;
-    bankrollAfter: number;
+    chipBalance: number;
   };
 };
 
@@ -28,6 +29,7 @@ export type RouletteGameState = {
   totalStake: number;
   spinning: boolean;
   result: number | null;
+  spinTargetResult: number | null;
   history: number[];
   lastSpin: {
     result: number;
@@ -44,32 +46,49 @@ export function useRouletteGame(initialBankroll = 1000) {
   const [bets, setBets] = useState<RouletteBet[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<number | null>(null);
+  const [spinTargetResult, setSpinTargetResult] = useState<number | null>(null);
   const [history, setHistory] = useState<number[]>([]);
   const [lastSpin, setLastSpin] = useState<RouletteGameState["lastSpin"]>(null);
-  const animationResultRef = useRef<number | null>(null);
 
   const totalStake = useMemo(() => calculateTotalStake(bets), [bets]);
 
-  async function requestBackendSpin(currentBankroll: number, currentBets: RouletteBet[]) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/roulette/spin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          bankroll: currentBankroll,
-          bets: currentBets,
-        }),
-      });
-
-      if (!response.ok) return null;
-      const payload = (await response.json()) as SpinApiResponse;
-      if (!payload.data) return null;
-      return payload.data;
-    } catch {
+  async function requestBackendSpin(currentBets: RouletteBet[]) {
+    const token = await authStorage.getToken();
+    if (!token) {
       return null;
     }
+
+    const baseUrls = getApiBaseUrls();
+
+    for (const baseUrl of baseUrls) {
+      try {
+        const response = await fetch(`${baseUrl}/roulette/spin`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            bets: currentBets,
+          }),
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = (await response.json()) as SpinApiResponse;
+        if (!payload.data) {
+          continue;
+        }
+
+        return payload.data;
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
   }
 
   function placeBet(betInput: RouletteBetInput) {
@@ -124,23 +143,25 @@ export function useRouletteGame(initialBankroll = 1000) {
     if (spinning || bets.length === 0) return false;
 
     setSpinning(true);
-    animationResultRef.current = null; // Reset pour le prochain spin
+    setSpinTargetResult(null);
     const currentBets = [...bets];
-    const currentBankroll = bankroll;
 
-    const pendingRemoteSpin = requestBackendSpin(currentBankroll, currentBets);
+    const pendingRemoteSpin = requestBackendSpin(currentBets);
+    pendingRemoteSpin.then((remoteSpin) => {
+      if (!remoteSpin) {
+        setSpinning(false);
+        return;
+      }
 
-    setTimeout(() => {
-      pendingRemoteSpin.then((remoteSpin) => {
-        // Utiliser le résultat de l'animation au lieu du backend
-        const spinResult = animationResultRef.current ?? Math.floor(Math.random() * 37);
-        const spinStake = calculateTotalStake(currentBets);
-        const wonAmount = calculateTotalReturn(currentBets, spinResult);
-        const net = wonAmount - spinStake;
+      const spinResult = remoteSpin.resultNumber;
+      const spinStake = remoteSpin.totalStake;
+      const wonAmount = remoteSpin.totalReturn;
+      const net = remoteSpin.net;
 
-        console.log(`[Hook] Using animation result: ${animationResultRef.current} → final: ${spinResult}`);
+      setSpinTargetResult(spinResult);
 
-        setBankroll((previous: number) => previous + wonAmount);
+      setTimeout(() => {
+        setBankroll(remoteSpin.chipBalance);
         setResult(spinResult);
         setHistory((previous: number[]) => [spinResult, ...previous].slice(0, HISTORY_LIMIT));
         setLastSpin({
@@ -151,16 +172,12 @@ export function useRouletteGame(initialBankroll = 1000) {
           isWin: wonAmount > 0,
         });
         setBets([]);
+        setSpinTargetResult(null);
         setSpinning(false);
-      });
-    }, 2200);
+      }, 2200);
+    });
 
     return true;
-  }
-
-  function handleResultGenerated(generatedResult: number) {
-    console.log(`[Hook] Received animation result: ${generatedResult}`);
-    animationResultRef.current = generatedResult;
   }
 
   const gameState: RouletteGameState = {
@@ -170,6 +187,7 @@ export function useRouletteGame(initialBankroll = 1000) {
     totalStake,
     spinning,
     result,
+    spinTargetResult,
     history,
     lastSpin,
   };
@@ -181,6 +199,5 @@ export function useRouletteGame(initialBankroll = 1000) {
     clearBets,
     doubleBets,
     spinWheel,
-    onResultGenerated: handleResultGenerated,
   };
 }
