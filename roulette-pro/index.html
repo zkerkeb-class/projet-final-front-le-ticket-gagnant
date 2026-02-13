@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roulette Européenne Pro</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="top-bar glass">
+        <h1>Roulette Européenne</h1>
+        <p>Bois poli, rail doré, bille réaliste · arrêt piloté par JavaScript</p>
+      </section>
+
+      <section class="wheel-layout">
+        <div class="wheel-panel glass">
+          <div class="pointer"></div>
+          <div class="wheel-wrap">
+            <svg id="wheelSvg" viewBox="0 0 800 800" aria-label="Roue de roulette professionnelle">
+              <defs>
+                <radialGradient id="bgGrad" cx="50%" cy="45%" r="65%">
+                  <stop offset="0%" stop-color="#24160d" />
+                  <stop offset="65%" stop-color="#130b07" />
+                  <stop offset="100%" stop-color="#090604" />
+                </radialGradient>
+
+                <linearGradient id="woodGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#5a331e" />
+                  <stop offset="40%" stop-color="#7b4a2a" />
+                  <stop offset="60%" stop-color="#623a22" />
+                  <stop offset="100%" stop-color="#3d2415" />
+                </linearGradient>
+
+                <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#fff1b3" />
+                  <stop offset="35%" stop-color="#e6bb53" />
+                  <stop offset="55%" stop-color="#c5902f" />
+                  <stop offset="100%" stop-color="#f5d889" />
+                </linearGradient>
+
+                <radialGradient id="hubGrad" cx="50%" cy="35%" r="60%">
+                  <stop offset="0%" stop-color="#e3c470" />
+                  <stop offset="100%" stop-color="#8f6620" />
+                </radialGradient>
+              </defs>
+
+              <circle cx="400" cy="400" r="392" fill="url(#bgGrad)" stroke="#2a1a10" stroke-width="12" />
+              <circle cx="400" cy="400" r="330" fill="url(#woodGrad)" stroke="url(#goldGrad)" stroke-width="10" />
+              <circle cx="400" cy="400" r="304" fill="#2b1b12" stroke="#8f6620" stroke-width="4" />
+
+              <g id="wheelGroup" transform="rotate(0 400 400)"></g>
+
+              <circle cx="400" cy="400" r="140" fill="#1d120b" stroke="url(#goldGrad)" stroke-width="6" />
+              <circle cx="400" cy="400" r="82" fill="url(#hubGrad)" stroke="#f6df9e" stroke-width="3" />
+              <circle cx="400" cy="400" r="16" fill="#f7ebbe" stroke="#9c7429" stroke-width="2" />
+            </svg>
+
+            <div id="ball" class="ball" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <aside class="control-panel glass">
+          <div class="field">
+            <label for="targetNumber">Numéro cible</label>
+            <select id="targetNumber"></select>
+          </div>
+
+          <div class="actions">
+            <button id="spinTarget" class="btn primary">Lancer sur ce numéro</button>
+            <button id="spinRandom" class="btn">Lancer aléatoire</button>
+          </div>
+
+          <div class="result-box">
+            <span>Résultat</span>
+            <strong id="resultValue">--</strong>
+          </div>
+
+          <p class="hint">API JS disponible: <code>spinTo(17)</code></p>
+        </aside>
+      </section>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inscription - Le Ticket Gagnant</title>
+  <link rel="stylesheet" href="assets/premium.css" />
+</head>
+<body>
+  <main class="auth-wrap">
+    <section class="auth-card glass">
+      <h2>Inscription</h2>
+      <p>Créez votre profil joueur et démarrez avec des jetons de bienvenue.</p>
+
+      <form id="register-form">
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" type="text" placeholder="LuckyKing" required minlength="3" />
+        </div>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="joueur@casino.com" required />
+        </div>
+
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input id="password" type="password" placeholder="minimum 6 caractères" required minlength="6" />
+        </div>
+
+        <button class="btn btn-primary" type="submit">Créer mon compte</button>
+        <p id="form-message" class="message"></p>
+      </form>
+
+      <div class="auth-footer">
+        Déjà membre ? <a href="login.html">Se connecter</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/register.js"></script>
+</body>
+</html>
