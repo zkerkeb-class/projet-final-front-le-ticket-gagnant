@@ -1,19 +1,19 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Platform,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
 } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
@@ -27,11 +27,32 @@ type CardType = {
 
 type BlackjackStatus = "ACTIVE" | "PLAYER_WON" | "DEALER_WON" | "PUSH";
 
+type SideBetType = "perfectPair" | "twentyOnePlusThree";
+
+type SideBetInputState = Record<SideBetType, string>;
+
+type SideBetResult = {
+  id: SideBetType;
+  label: string;
+  betAmount: number;
+  won: boolean;
+  payoutMultiplier: number;
+  payout: number;
+  outcome: number;
+  hit: string | null;
+};
+
 type BlackjackApiState = {
   sessionId: string;
   status: BlackjackStatus;
   betAmount: number;
+  sideBetTotal?: number;
+  totalWager?: number;
   outcome: number;
+  sideBetOutcome?: number;
+  sideBetPayout?: number;
+  sideBetResults?: SideBetResult[];
+  sideBets?: Record<SideBetType, number>;
   chipBalance: number;
   playerHand: CardType[];
   playerHands?: CardType[][];
@@ -97,6 +118,16 @@ const parseBetAmount = (value: string): number => {
   return Number(normalized);
 };
 
+const parseOptionalBetAmount = (value: string): number => {
+  const normalized = value.replace(/\s+/g, "").replace(",", ".");
+  if (!normalized) {
+    return 0;
+  }
+
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : Number.NaN;
+};
+
 const getApiBaseUrls = (): string[] => {
   if (API_BASE_URL) {
     return [API_BASE_URL];
@@ -124,6 +155,11 @@ export default function BlackjackScreen() {
   const resolvedUserId = routeUserId ?? FALLBACK_USER_ID;
 
   const [betInput, setBetInput] = useState("50");
+  const [tab, setTab] = useState<"standard" | "sidebets">("standard");
+  const [sideBetInputs, setSideBetInputs] = useState<SideBetInputState>({
+    perfectPair: "0",
+    twentyOnePlusThree: "0",
+  });
   const [gameState, setGameState] = useState<BlackjackApiState | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -134,8 +170,19 @@ export default function BlackjackScreen() {
 
   const canStart = useMemo(() => {
     const amount = parseBetAmount(betInput);
-    return Number.isFinite(amount) && amount > 0 && !loading;
-  }, [betInput, loading]);
+    const perfectPair = parseOptionalBetAmount(sideBetInputs.perfectPair);
+    const twentyOnePlusThree = parseOptionalBetAmount(sideBetInputs.twentyOnePlusThree);
+
+    return (
+      Number.isFinite(amount)
+      && amount > 0
+      && Number.isFinite(perfectPair)
+      && perfectPair >= 0
+      && Number.isFinite(twentyOnePlusThree)
+      && twentyOnePlusThree >= 0
+      && !loading
+    );
+  }, [betInput, loading, sideBetInputs]);
 
   const apiCall = async (path: "/start" | "/hit" | "/stand" | "/split" | "/double", payload: Record<string, unknown>) => {
     const baseUrls = getApiBaseUrls();
@@ -175,10 +222,20 @@ export default function BlackjackScreen() {
 
   const handleStart = async () => {
     const betAmount = parseBetAmount(betInput);
+    const perfectPair = parseOptionalBetAmount(sideBetInputs.perfectPair);
+    const twentyOnePlusThree = parseOptionalBetAmount(sideBetInputs.twentyOnePlusThree);
+
     if (!Number.isFinite(betAmount) || betAmount <= 0) {
       const message = "Entrez un montant valide supérieur à 0 (ex: 50 ou 50,5).";
       setErrorMessage(message);
       Alert.alert("Mise invalide", message);
+      return;
+    }
+
+    if (!Number.isFinite(perfectPair) || perfectPair < 0 || !Number.isFinite(twentyOnePlusThree) || twentyOnePlusThree < 0) {
+      const message = "Les mises secondaires doivent être des montants valides (>= 0).";
+      setErrorMessage(message);
+      Alert.alert("Mise secondaire invalide", message);
       return;
     }
 
@@ -188,6 +245,10 @@ export default function BlackjackScreen() {
       const nextState = await apiCall("/start", {
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
         betAmount,
+        sideBets: {
+          perfectPair,
+          twentyOnePlusThree,
+        },
       });
       setGameState(nextState);
     } catch (error) {
@@ -297,6 +358,28 @@ export default function BlackjackScreen() {
 
     setBetInput((amount * 2).toFixed(2).replace(".", ","));
   };
+
+  const updateSideBetInput = (key: SideBetType, value: string) => {
+    setSideBetInputs((current) => ({
+      ...current,
+      [key]: value,
+    }));
+
+    if (errorMessage) {
+      setErrorMessage(null);
+    }
+  };
+
+  const sideBetTotalInput = useMemo(() => {
+    const perfectPair = parseOptionalBetAmount(sideBetInputs.perfectPair);
+    const twentyOnePlusThree = parseOptionalBetAmount(sideBetInputs.twentyOnePlusThree);
+
+    if (!Number.isFinite(perfectPair) || !Number.isFinite(twentyOnePlusThree)) {
+      return 0;
+    }
+
+    return Math.max(0, perfectPair) + Math.max(0, twentyOnePlusThree);
+  }, [sideBetInputs]);
 
   const playerHands = gameState?.playerHands ?? (gameState ? [gameState.playerHand] : []);
   const activeHandIndex = typeof gameState?.activeHandIndex === "number" ? gameState.activeHandIndex : 0;
@@ -469,6 +552,10 @@ export default function BlackjackScreen() {
     double: false,
   };
 
+  const sideBetResults = gameState?.sideBetResults ?? [];
+  const hasPlacedSideBet = sideBetResults.some((result) => result.betAmount > 0);
+  const resolvedTotalWager = gameState?.totalWager ?? ((gameState?.betAmount ?? 0) + (gameState?.sideBetTotal ?? 0));
+
   const renderActionTile = (
     label: string,
     icon: string,
@@ -492,47 +579,92 @@ export default function BlackjackScreen() {
         <View style={[styles.layout, isWide && styles.layoutWide]}>
           <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
             <View style={styles.segmentedControl}>
-              <View style={[styles.segmentItem, styles.segmentActive]}>
-                <Text style={[styles.segmentText, styles.segmentTextActive]}>Standard</Text>
-              </View>
-              <View style={styles.segmentItem}>
-                <Text style={styles.segmentText}>Mise secondaire</Text>
-              </View>
+              <Pressable
+                style={[styles.segmentItem, tab === "standard" && styles.segmentActive]}
+                onPress={() => setTab("standard")}
+              >
+                <Text style={[styles.segmentText, tab === "standard" && styles.segmentTextActive]}>Standard</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.segmentItem, tab === "sidebets" && styles.segmentActive]}
+                onPress={() => setTab("sidebets")}
+              >
+                <Text style={[styles.segmentText, tab === "sidebets" && styles.segmentTextActive]}>Mise secondaire</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.betPanel}>
-              <View style={styles.betHeaderRow}>
-                <Text style={styles.betTitle}>Montant du pari</Text>
-                <Text style={styles.betMeta}>0,00000000 SOL</Text>
-              </View>
-
-              <View style={styles.betInputWrap}>
-                <View style={styles.euroBadge}>
-                  <Text style={styles.euroBadgeText}>€</Text>
+            {tab === "standard" ? (
+              <View style={styles.betPanel}>
+                <View style={styles.betHeaderRow}>
+                  <Text style={styles.betTitle}>Montant du pari</Text>
+                  <Text style={styles.betMeta}>Mise principale</Text>
                 </View>
 
-                <TextInput
-                  style={styles.betInput}
-                  keyboardType="numeric"
-                  value={betInput}
-                  onChangeText={(value) => {
-                    setBetInput(value);
-                    if (errorMessage) {
-                      setErrorMessage(null);
-                    }
-                  }}
-                  placeholder="0,00"
-                  placeholderTextColor="#7f8899"
-                />
+                <View style={styles.betInputWrap}>
+                  <View style={styles.euroBadge}>
+                    <Text style={styles.euroBadgeText}>€</Text>
+                  </View>
 
-                <Pressable style={styles.quickButton} onPress={quickHalfBet}>
-                  <Text style={styles.quickButtonText}>½</Text>
-                </Pressable>
-                <Pressable style={styles.quickButton} onPress={quickDoubleBet}>
-                  <Text style={styles.quickButtonText}>2x</Text>
-                </Pressable>
+                  <TextInput
+                    style={styles.betInput}
+                    keyboardType="numeric"
+                    value={betInput}
+                    onChangeText={(value) => {
+                      setBetInput(value);
+                      if (errorMessage) {
+                        setErrorMessage(null);
+                      }
+                    }}
+                    placeholder="0,00"
+                    placeholderTextColor="#7f8899"
+                  />
+
+                  <Pressable style={styles.quickButton} onPress={quickHalfBet}>
+                    <Text style={styles.quickButtonText}>½</Text>
+                  </Pressable>
+                  <Pressable style={styles.quickButton} onPress={quickDoubleBet}>
+                    <Text style={styles.quickButtonText}>2x</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.betPanel}>
+                <View style={styles.betHeaderRow}>
+                  <Text style={styles.betTitle}>Mises secondaires</Text>
+                  <Text style={styles.betMeta}>Optionnel</Text>
+                </View>
+
+                <View style={styles.sideBetGroup}>
+                  <Text style={styles.sideBetLabel}>Perfect Pair</Text>
+                  <TextInput
+                    style={styles.sideBetInput}
+                    keyboardType="numeric"
+                    value={sideBetInputs.perfectPair}
+                    onChangeText={(value) => updateSideBetInput("perfectPair", value)}
+                    placeholder="0,00"
+                    placeholderTextColor="#7f8899"
+                  />
+                  <Text style={styles.sideBetHint}>Paiements: 25:1 / 12:1 / 6:1</Text>
+                </View>
+
+                <View style={styles.sideBetGroup}>
+                  <Text style={styles.sideBetLabel}>21+3</Text>
+                  <TextInput
+                    style={styles.sideBetInput}
+                    keyboardType="numeric"
+                    value={sideBetInputs.twentyOnePlusThree}
+                    onChangeText={(value) => updateSideBetInput("twentyOnePlusThree", value)}
+                    placeholder="0,00"
+                    placeholderTextColor="#7f8899"
+                  />
+                  <Text style={styles.sideBetHint}>Paiements: 100:1 / 40:1 / 30:1 / 10:1 / 5:1</Text>
+                </View>
+
+                <View style={styles.sideBetSummary}>
+                  <Text style={styles.sideBetSummaryText}>Total mises secondaires: {sideBetTotalInput.toFixed(2)} jetons</Text>
+                </View>
+              </View>
+            )}
 
             {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
 
@@ -577,13 +709,31 @@ export default function BlackjackScreen() {
                 <View style={styles.infoBar}>
                   <View>
                     <Text style={styles.infoLabel}>Mise totale</Text>
-                    <Text style={styles.infoValue}>{gameState.betAmount.toFixed(2)} jetons</Text>
+                    <Text style={styles.infoValue}>{resolvedTotalWager.toFixed(2)} jetons</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.infoLabel}>Mise secondaire</Text>
+                    <Text style={styles.infoValue}>{(gameState.sideBetTotal ?? 0).toFixed(2)} jetons</Text>
                   </View>
                   <View>
                     <Text style={styles.infoLabel}>Pioche</Text>
                     <Text style={styles.infoValue}>{gameState.remainingCards} cartes</Text>
                   </View>
                 </View>
+
+                {hasPlacedSideBet && (
+                  <View style={styles.sideBetResultPanel}>
+                    <Text style={styles.sideBetResultTitle}>Mises secondaires</Text>
+                    {sideBetResults.filter((result) => result.betAmount > 0).map((result) => (
+                      <View key={result.id} style={styles.sideBetResultRow}>
+                        <Text style={styles.sideBetResultLabel}>{result.label}</Text>
+                        <Text style={[styles.sideBetResultValue, result.outcome >= 0 ? styles.resultWin : styles.resultLoss]}>
+                          {result.hit ? `${result.hit} • ` : ""}{result.outcome >= 0 ? "+" : ""}{result.outcome.toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 <View style={styles.phaseBanner}>
                   <Text style={styles.phaseBannerText}>
@@ -679,6 +829,9 @@ export default function BlackjackScreen() {
                     <Text style={[styles.resultText, gameState.outcome > 0 ? styles.resultWin : gameState.outcome < 0 ? styles.resultLoss : null]}>
                       Gain net: {gameState.outcome.toFixed(2)} jetons
                     </Text>
+                    {hasPlacedSideBet ? (
+                      <Text style={styles.resultSubtext}>Mises secondaires: {(gameState.sideBetOutcome ?? 0) >= 0 ? "+" : ""}{(gameState.sideBetOutcome ?? 0).toFixed(2)} jetons</Text>
+                    ) : null}
                   </View>
                 )}
               </View>
@@ -803,6 +956,48 @@ const styles = StyleSheet.create({
   quickButtonText: {
     color: "#d6dbe5",
     fontSize: 20,
+    fontWeight: "700",
+  },
+  sideBetGroup: {
+    backgroundColor: "#1b2434",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#263449",
+    padding: 10,
+    gap: 6,
+  },
+  sideBetLabel: {
+    color: "#e5e7eb",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  sideBetInput: {
+    backgroundColor: "#111a2a",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2a3d5c",
+    color: "#f4f6fa",
+    fontSize: 24,
+    fontWeight: "700",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sideBetHint: {
+    color: "#8fa0b8",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  sideBetSummary: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2a3d5c",
+    backgroundColor: "rgba(20, 30, 46, 0.9)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  sideBetSummaryText: {
+    color: "#d5e3ff",
+    fontSize: 14,
     fontWeight: "700",
   },
   errorText: {
@@ -990,6 +1185,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     marginTop: 2,
+  },
+  sideBetResultPanel: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2a3d60",
+    backgroundColor: "rgba(16, 25, 40, 0.78)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  sideBetResultTitle: {
+    color: "#d8e7ff",
+    fontSize: 14,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  sideBetResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sideBetResultLabel: {
+    color: "#f1f5f9",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  sideBetResultValue: {
+    fontSize: 14,
+    fontWeight: "800",
   },
   playMat: {
     borderRadius: 16,
@@ -1200,6 +1425,11 @@ const styles = StyleSheet.create({
   resultText: {
     color: "#c6d0e3",
     fontSize: 16,
+    fontWeight: "700",
+  },
+  resultSubtext: {
+    color: "#9eb2d1",
+    fontSize: 14,
     fontWeight: "700",
   },
   resultWin: {
