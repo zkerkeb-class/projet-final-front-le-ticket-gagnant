@@ -1,7 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { useNavigation } from "@react-navigation/native";
+import { Animated, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
+import PremiumBackground from "@/src/components/PremiumBackground";
+import { useRequireAuth } from "@/src/hooks/useRequireAuth";
+import { authStorage } from "@/src/services/authStorage";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
 const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
@@ -25,13 +30,19 @@ const withAlpha = (hex: string, alpha: number): string => {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{ userId?: string | string[]; username?: string | string[] }>();
+  const authChecked = useRequireAuth();
+  const heroFade = useRef(new Animated.Value(0)).current;
+  const heroY = useRef(new Animated.Value(16)).current;
+  const cardsProgress = useRef(new Animated.Value(0)).current;
 
   const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
   const username = Array.isArray(params.username) ? params.username[0] : params.username;
   const resolvedUserId = userId ?? FALLBACK_USER_ID;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authStorage.clearSession();
     router.replace("/login");
   };
 
@@ -80,174 +91,373 @@ export default function HomeScreen() {
     });
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.backgroundLayerA} />
-      <View style={styles.backgroundLayerB} />
+  const handleOpenPoker = () => {
+    router.push({
+      pathname: "/poker",
+      params: {
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+      },
+    });
+  };
 
-      <View style={styles.balanceBadgeWrap}>
-        <ChipBalanceBadge userId={resolvedUserId} />
+  const handleOpenProfile = () => {
+    router.push("/profile");
+  };
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerProfileButton} onPress={handleOpenProfile}>
+            <Text style={styles.headerProfileText}>Mon compte</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerLogoutButton} onPress={() => void handleLogout()}>
+            <Text style={styles.headerLogoutText}>Se déconnecter</Text>
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(heroFade, {
+        toValue: 1,
+        duration: 360,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(heroY, {
+        toValue: 0,
+        duration: 420,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(cardsProgress, {
+        toValue: 1,
+        duration: 950,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, [heroFade, heroY, cardsProgress]);
+
+  if (!authChecked) {
+    return (
+      <View style={styles.screen}>
+        <PremiumBackground />
       </View>
+    );
+  }
 
-      <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
-      {username ? <Text style={styles.subtitle}>Connecté en tant que {username}</Text> : null}
+  const gameCards = [
+    {
+      key: "blackjack",
+      icon: "🂡",
+      title: "BLACKJACK",
+      subtitle: "Cartes & décisions",
+      border: "rgba(176, 110, 102, 0.8)",
+      blobA: "rgba(130, 82, 76, 0.4)",
+      blobB: "rgba(89, 70, 120, 0.3)",
+      diagonal: "rgba(124, 78, 74, 0.26)",
+      onPress: handleGoToBlackjack,
+    },
+    {
+      key: "ladder",
+      icon: "🪜",
+      title: "LUCKY LADDER",
+      subtitle: "Montez ou tombez",
+      border: "rgba(122, 98, 165, 0.82)",
+      blobA: "rgba(98, 78, 140, 0.38)",
+      blobB: "rgba(112, 92, 153, 0.24)",
+      diagonal: "rgba(92, 74, 130, 0.24)",
+      onPress: handleOpenLuckyLadder,
+    },
+    {
+      key: "crash",
+      icon: "🚀",
+      title: "CRASH",
+      subtitle: "Cashout avant chute",
+      border: "rgba(173, 136, 93, 0.8)",
+      blobA: "rgba(119, 93, 63, 0.35)",
+      blobB: "rgba(94, 76, 130, 0.26)",
+      diagonal: "rgba(136, 106, 74, 0.24)",
+      onPress: handleOpenCrash,
+    },
+    {
+      key: "roulette",
+      icon: "🎯",
+      title: "ROULETTE",
+      subtitle: "Table électro",
+      border: "rgba(196, 161, 103, 0.82)",
+      blobA: "rgba(141, 115, 72, 0.34)",
+      blobB: "rgba(126, 79, 76, 0.22)",
+      diagonal: "rgba(156, 127, 82, 0.24)",
+      onPress: handleOpenRoulette,
+    },
+    {
+      key: "mines",
+      icon: "💣",
+      title: "MINES",
+      subtitle: "Risque progressif",
+      border: "rgba(140, 149, 106, 0.82)",
+      blobA: "rgba(92, 99, 70, 0.34)",
+      blobB: "rgba(116, 96, 73, 0.22)",
+      diagonal: "rgba(107, 114, 81, 0.24)",
+      onPress: handleOpenMines,
+    },
+    {
+      key: "poker",
+      icon: "🃏",
+      title: "POKER",
+      subtitle: "Texas Hold'em Pro",
+      border: "rgba(186, 152, 98, 0.8)",
+      blobA: "rgba(127, 102, 67, 0.3)",
+      blobB: "rgba(90, 72, 127, 0.24)",
+      diagonal: "rgba(138, 112, 73, 0.22)",
+      onPress: handleOpenPoker,
+    },
+  ] as const;
+
+  return (
+    <View style={styles.screen}>
+      <PremiumBackground />
+
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+
+      <Animated.View style={[styles.heroCard, { opacity: heroFade, transform: [{ translateY: heroY }] }] }>
+        <View style={styles.heroTopRow}>
+          <Text style={styles.heroBadge}>LOUNGE LIVE</Text>
+          <View style={styles.heroBalanceWrap}>
+            <ChipBalanceBadge userId={resolvedUserId} />
+          </View>
+        </View>
+        <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
+        {username ? <Text style={styles.subtitle}>Connecté en tant que {username}</Text> : null}
+        <Text style={styles.heroHint}>Choisissez votre table et lancez votre session premium.</Text>
+      </Animated.View>
 
       <View style={styles.gamesContainer}>
-        <Text style={styles.sectionTitle}>Jeux disponibles</Text>
+        <View style={styles.sectionShell}>
+          <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Jeux disponibles</Text>
+          <View style={styles.sectionBadge}>
+            <Text style={styles.sectionBadgeText}>MODE VIP</Text>
+          </View>
+        </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statPill}><Text style={styles.statPillText}>12 tables live</Text></View>
+            <View style={styles.statPill}><Text style={styles.statPillText}>Tournois actifs</Text></View>
+            <View style={styles.statPill}><Text style={styles.statPillText}>Multiplicateurs x20</Text></View>
+          </View>
+        </View>
 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.gamesRow}
         >
-          <TouchableOpacity
-            style={[styles.gameCardHorizontal, { borderColor: withAlpha(casinoTheme.colors.red, 0.8) }]}
-            onPress={handleGoToBlackjack}
-          >
-            <View style={styles.gameCardBackground}>
-              <View style={[styles.gameBlobA, { backgroundColor: withAlpha(casinoTheme.colors.red, 0.35) }]} />
-              <View style={[styles.gameBlobB, { backgroundColor: withAlpha(casinoTheme.colors.violet, 0.24) }]} />
-              <View style={[styles.gameDiagonal, { backgroundColor: withAlpha(casinoTheme.colors.red, 0.18) }]} />
+          {gameCards.map((game, index) => {
+            const start = index * 0.08;
+            const end = Math.min(start + 0.35, 1);
 
-              <Text style={styles.gameIcon}>🂡</Text>
+            const opacity = cardsProgress.interpolate({
+              inputRange: [start, end],
+              outputRange: [0, 1],
+              extrapolate: "clamp",
+            });
 
-              <View style={styles.gameFooter}>
-                <Text style={styles.gameTitleHorizontal}>BLACKJACK</Text>
-                <Text style={styles.gameSubtitleHorizontal}>Cartes & décisions</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+            const translateY = cardsProgress.interpolate({
+              inputRange: [start, end],
+              outputRange: [16, 0],
+              extrapolate: "clamp",
+            });
 
-          <TouchableOpacity
-            style={[styles.gameCardHorizontal, { borderColor: withAlpha(casinoTheme.colors.violet, 0.82) }]}
-            onPress={handleOpenLuckyLadder}
-          >
-            <View style={styles.gameCardBackground}>
-              <View style={[styles.gameBlobA, { backgroundColor: withAlpha(casinoTheme.colors.violet, 0.34) }]} />
-              <View style={[styles.gameBlobB, { backgroundColor: withAlpha(casinoTheme.colors.cyan, 0.2) }]} />
-              <View style={[styles.gameDiagonal, { backgroundColor: withAlpha(casinoTheme.colors.violet, 0.2) }]} />
+            const scale = cardsProgress.interpolate({
+              inputRange: [start, end],
+              outputRange: [0.96, 1],
+              extrapolate: "clamp",
+            });
 
-              <Text style={styles.gameIcon}>🪜</Text>
+            return (
+              <Animated.View key={game.key} style={{ opacity, transform: [{ translateY }, { scale }] }}>
+                <TouchableOpacity
+                  style={[styles.gameCardHorizontal, { borderColor: game.border }]}
+                  onPress={game.onPress}
+                >
+                  <View style={styles.gameCardBackground}>
+                    <View style={[styles.gameBlobA, { backgroundColor: game.blobA }]} />
+                    <View style={[styles.gameBlobB, { backgroundColor: game.blobB }]} />
+                    <View style={[styles.gameDiagonal, { backgroundColor: game.diagonal }]} />
+                    <View style={styles.gameGloss} />
 
-              <View style={styles.gameFooter}>
-                <Text style={styles.gameTitleHorizontal}>LUCKY LADDER</Text>
-                <Text style={styles.gameSubtitleHorizontal}>Montez ou tombez</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+                    <Text style={styles.gameIcon}>{game.icon}</Text>
 
-          <TouchableOpacity
-            style={[styles.gameCardHorizontal, { borderColor: withAlpha(casinoTheme.colors.cyan, 0.84) }]}
-            onPress={handleOpenCrash}
-          >
-            <View style={styles.gameCardBackground}>
-              <View style={[styles.gameBlobA, { backgroundColor: withAlpha(casinoTheme.colors.cyan, 0.28) }]} />
-              <View style={[styles.gameBlobB, { backgroundColor: withAlpha(casinoTheme.colors.violet, 0.22) }]} />
-              <View style={[styles.gameDiagonal, { backgroundColor: withAlpha(casinoTheme.colors.cyan, 0.18) }]} />
-
-              <Text style={styles.gameIcon}>🚀</Text>
-
-              <View style={styles.gameFooter}>
-                <Text style={styles.gameTitleHorizontal}>CRASH</Text>
-                <Text style={styles.gameSubtitleHorizontal}>Cashout avant chute</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.gameCardHorizontal, { borderColor: withAlpha(casinoTheme.colors.gold, 0.82) }]}
-            onPress={handleOpenRoulette}
-          >
-            <View style={styles.gameCardBackground}>
-              <View style={[styles.gameBlobA, { backgroundColor: withAlpha(casinoTheme.colors.gold, 0.28) }]} />
-              <View style={[styles.gameBlobB, { backgroundColor: withAlpha(casinoTheme.colors.red, 0.18) }]} />
-              <View style={[styles.gameDiagonal, { backgroundColor: withAlpha(casinoTheme.colors.gold, 0.2) }]} />
-
-              <Text style={styles.gameIcon}>🎯</Text>
-
-              <View style={styles.gameFooter}>
-                <Text style={styles.gameTitleHorizontal}>ROULETTE</Text>
-                <Text style={styles.gameSubtitleHorizontal}>Table électro</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.gameCardHorizontal, { borderColor: withAlpha(casinoTheme.colors.green, 0.82) }]}
-            onPress={handleOpenMines}
-          >
-            <View style={styles.gameCardBackground}>
-              <View style={[styles.gameBlobA, { backgroundColor: withAlpha(casinoTheme.colors.green, 0.28) }]} />
-              <View style={[styles.gameBlobB, { backgroundColor: withAlpha(casinoTheme.colors.cyan, 0.16) }]} />
-              <View style={[styles.gameDiagonal, { backgroundColor: withAlpha(casinoTheme.colors.green, 0.22) }]} />
-
-              <Text style={styles.gameIcon}>💣</Text>
-
-              <View style={styles.gameFooter}>
-                <Text style={styles.gameTitleHorizontal}>MINES</Text>
-                <Text style={styles.gameSubtitleHorizontal}>Risque progressif</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+                    <View style={styles.gameFooter}>
+                      <Text style={styles.gameTitleHorizontal}>{game.title}</Text>
+                      <Text style={styles.gameSubtitleHorizontal}>{game.subtitle}</Text>
+                      <Text style={styles.gameCta}>JOUER</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })}
         </ScrollView>
       </View>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Se déconnecter</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    position: "relative",
+    overflow: "hidden",
+  },
   container: {
     flex: 1,
-    backgroundColor: casinoTheme.colors.bg,
+    backgroundColor: "transparent",
   },
   content: {
     padding: 20,
-    gap: 12,
-    paddingBottom: 30,
+    gap: 14,
+    paddingBottom: 20,
     position: "relative",
   },
-  balanceBadgeWrap: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    zIndex: 4,
+  headerActions: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
   },
-  backgroundLayerA: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: casinoTheme.colors.bg,
+  headerProfileButton: {
+    minHeight: 30,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(214, 188, 150, 0.42)",
+    backgroundColor: "rgba(239, 233, 222, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  backgroundLayerB: {
-    position: "absolute",
-    top: -120,
-    left: -120,
-    right: -120,
-    height: 360,
-    borderRadius: 200,
-    backgroundColor: "rgba(74,132,255,0.14)",
+  headerProfileText: {
+    color: "#f1d5a4",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  headerLogoutButton: {
+    minHeight: 30,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(202, 120, 111, 0.72)",
+    backgroundColor: "rgba(93, 39, 43, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerLogoutText: {
+    color: "#e3b1aa",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  heroCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(210, 187, 151, 0.35)",
+    borderRadius: casinoTheme.radius.lg,
+    backgroundColor: "rgba(23, 21, 35, 0.94)",
+    padding: 14,
+    gap: 2,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 2,
+  },
+  heroBalanceWrap: {
+    transform: [{ scale: 0.9 }],
+    marginTop: -4,
+    marginRight: -4,
+  },
+  heroBadge: {
+    color: "#d8b680",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 4,
   },
   title: {
     fontSize: 28,
     fontWeight: "900",
-    color: casinoTheme.colors.cyan,
+    color: "#f1d5a4",
     letterSpacing: 0.6,
-    marginTop: 20,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subtitle: {
     fontSize: 14,
-    color: casinoTheme.colors.textMuted,
-    marginBottom: 8,
+    color: "rgba(229, 220, 201, 0.84)",
+  },
+  heroHint: {
+    marginTop: 6,
+    color: "rgba(231, 223, 204, 0.82)",
+    fontSize: 13,
+    fontWeight: "600",
   },
   gamesContainer: {
     width: "100%",
-    gap: 10,
+    gap: 12,
+  },
+  sectionShell: {
+    borderWidth: 1,
+    borderColor: "rgba(214, 188, 150, 0.24)",
+    borderRadius: casinoTheme.radius.md,
+    backgroundColor: "rgba(43, 40, 58, 0.58)",
+    padding: 10,
+    gap: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sectionBadge: {
+    borderWidth: 1,
+    borderColor: withAlpha(casinoTheme.colors.gold, 0.6),
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: withAlpha(casinoTheme.colors.gold, 0.12),
+  },
+  sectionBadgeText: {
+    color: casinoTheme.colors.gold,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  statPill: {
+    borderWidth: 1,
+    borderColor: withAlpha(casinoTheme.colors.panelBorder, 0.7),
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: withAlpha(casinoTheme.colors.bgAlt, 0.76),
+  },
+  statPillText: {
+    color: withAlpha(casinoTheme.colors.text, 0.9),
+    fontSize: 11,
+    fontWeight: "700",
   },
   gamesRow: {
-    gap: 12,
+    gap: 14,
     paddingRight: 10,
   },
   sectionTitle: {
@@ -256,21 +466,33 @@ const styles = StyleSheet.create({
     color: casinoTheme.colors.text,
   },
   gameCardHorizontal: {
-    width: 190,
+    width: 206,
     borderRadius: casinoTheme.radius.md,
-    backgroundColor: casinoTheme.colors.panel,
+    backgroundColor: "rgba(23, 21, 35, 0.94)",
     borderWidth: 1,
     borderColor: casinoTheme.colors.panelBorder,
     overflow: "hidden",
-    minHeight: 250,
+    minHeight: 268,
+    shadowColor: casinoTheme.colors.bg,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   gameCardBackground: {
-    minHeight: 250,
-    backgroundColor: casinoTheme.colors.bgAlt,
+    minHeight: 268,
+    backgroundColor: "rgba(34, 30, 48, 0.95)",
     justifyContent: "space-between",
-    padding: 12,
+    padding: 13,
     position: "relative",
     overflow: "hidden",
+  },
+  gameGloss: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "35%",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   gameBlobA: {
     position: "absolute",
@@ -298,7 +520,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   gameIcon: {
-    fontSize: 44,
+    fontSize: 48,
     color: casinoTheme.colors.text,
     alignSelf: "flex-end",
     marginTop: 2,
@@ -308,29 +530,22 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   gameTitleHorizontal: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "900",
-    color: casinoTheme.colors.text,
+    color: "#efe8da",
     letterSpacing: 0.8,
   },
   gameSubtitleHorizontal: {
     fontSize: 12,
-    color: casinoTheme.colors.textMuted,
+    color: "rgba(231, 223, 204, 0.76)",
     fontWeight: "700",
     letterSpacing: 0.3,
   },
-  logoutButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-    borderRadius: casinoTheme.radius.md,
-    borderWidth: 1,
-    borderColor: casinoTheme.colors.red,
-    alignItems: "center",
-    backgroundColor: "rgba(70,18,30,0.45)",
-  },
-  logoutText: {
-    color: casinoTheme.colors.red,
-    fontSize: 15,
-    fontWeight: "800",
+  gameCta: {
+    marginTop: 6,
+    color: "#f1d5a4",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
   },
 });

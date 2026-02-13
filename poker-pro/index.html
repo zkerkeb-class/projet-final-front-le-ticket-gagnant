@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Texas Hold'em Pro</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="poker-app">
+      <section id="lobbyScreen" class="lobby-screen">
+        <div class="lobby-card glass-panel">
+          <p class="eyebrow">Premium Table Experience</p>
+          <h1>Texas Hold'em Pro</h1>
+          <p class="subtitle">Configurez votre table et asseyez-vous face aux meilleurs adversaires IA.</p>
+
+          <div class="selector-wrap">
+            <label for="aiCountRange">Nombre d'adversaires IA</label>
+            <input id="aiCountRange" type="range" min="2" max="8" step="1" value="5" />
+            <div class="range-meta">
+              <span>2</span>
+              <strong><span id="aiCountValue">5</span> joueurs IA</strong>
+              <span>8</span>
+            </div>
+          </div>
+
+          <button id="startGameBtn" class="cta-seat">S'ASSEOIR À LA TABLE</button>
+        </div>
+      </section>
+
+      <section id="tableScreen" class="table-screen hidden" aria-live="polite">
+        <header class="table-top glass-panel">
+          <div>
+            <h2>Texas Hold'em Pro</h2>
+            <p id="handStateLabel">Main #1 · Pré-flop</p>
+          </div>
+          <div class="table-stats">
+            <div>
+              <span>Blindes</span>
+              <strong>20 / 40</strong>
+            </div>
+            <div>
+              <span>Pot total</span>
+              <strong id="potValue">0</strong>
+            </div>
+          </div>
+        </header>
+
+        <section class="table-area">
+          <div class="poker-table">
+            <div class="felt-texture"></div>
+            <div class="inner-rail"></div>
+
+            <div class="board-zone glass-board">
+              <div class="board-head">
+                <span>Pot</span>
+                <strong id="potCenterValue">0</strong>
+              </div>
+              <div id="chipPile" class="chip-pile"></div>
+              <div id="communityCards" class="community-cards"></div>
+            </div>
+
+            <div id="seatsLayer" class="seats-layer"></div>
+          </div>
+        </section>
+
+        <footer class="action-bar glass-panel">
+          <div class="action-main">
+            <button id="foldBtn" class="action-btn fold">Se Coucher</button>
+            <button id="callBtn" class="action-btn call">Parole</button>
+            <button id="raiseBtn" class="action-btn raise">Relancer</button>
+          </div>
+
+          <div class="raise-wrap">
+            <label for="raiseRange">Montant de la relance: <strong id="raiseAmount">0</strong></label>
+            <input id="raiseRange" type="range" min="0" max="0" step="10" value="0" />
+          </div>
+
+          <p id="statusText" class="status-text">Configurez la table pour commencer.</p>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
