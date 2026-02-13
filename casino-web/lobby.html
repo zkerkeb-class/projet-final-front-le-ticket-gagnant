@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lobby - Le Ticket Gagnant</title>
+  <link rel="stylesheet" href="assets/premium.css" />
+</head>
+<body>
+  <header class="topbar shell">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      LOBBY PRIVÉ
+    </div>
+    <button class="btn btn-secondary" data-logout>Déconnexion</button>
+  </header>
+
+  <main class="shell hero glass">
+    <section>
+      <span class="tag">Zone protégée</span>
+      <h1>Bienvenue dans le Lobby Casino.</h1>
+      <p>Cette page est accessible uniquement si un JWT valide est stocké dans le localStorage.</p>
+    </section>
+    <aside class="promo">
+      <h3>Prochaine étape</h3>
+      <ul>
+        <li>Brancher vos pages de jeux ici</li>
+        <li>Réutiliser protected-route.js sur chaque page privée</li>
+      </ul>
+    </aside>
+  </main>
+
+  <script src="js/protected-route.js"></script>
+</body>
+</html>

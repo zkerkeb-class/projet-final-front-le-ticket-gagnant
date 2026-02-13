@@ -1,15 +1,15 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
+  ActivityIndicator,
   Animated,
+  Alert,
   Easing,
-    KeyboardAvoidingView,
+  KeyboardAvoidingView,
   Platform,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
@@ -17,6 +17,8 @@ import PremiumBackground from "@/src/components/PremiumBackground";
 import { authApi } from "@/src/services/authApi";
 import { authStorage } from "@/src/services/authStorage";
 import { casinoTheme } from "@/src/theme/casinoTheme";
+
+const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const withAlpha = (hex: string, alpha: number): string => {
   const rgba = hex.match(/^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)$/i);
@@ -43,10 +45,12 @@ const withAlpha = (hex: string, alpha: number): string => {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 };
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const router = useRouter();
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const cardFade = useRef(new Animated.Value(0)).current;
   const cardY = useRef(new Animated.Value(22)).current;
@@ -86,16 +90,33 @@ export default function LoginScreen() {
     ).start();
   }, [cardFade, cardY, ctaPulse]);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const hasConfirmValue = confirmPassword.length > 0;
+  const passwordsMatch = password === confirmPassword;
+  const isStrongPassword = STRONG_PASSWORD_REGEX.test(password);
+
+  const handleRegister = async () => {
+    if (!username || !email || !password || !confirmPassword) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
+      return;
+    }
+
+    if (!isStrongPassword) {
+      Alert.alert(
+        "Erreur",
+        "Mot de passe trop faible. Utilisez au moins 8 caractères avec majuscule, minuscule, chiffre et caractère spécial.",
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      const payload = await authApi.login(email, password);
+      const payload = await authApi.register(username, email, password);
       await authStorage.setSession(payload.token, payload.user);
 
       router.replace({
@@ -106,7 +127,7 @@ export default function LoginScreen() {
         },
       });
     } catch (error) {
-      Alert.alert("Connexion impossible", error instanceof Error ? error.message : "Erreur inconnue.");
+      Alert.alert("Inscription impossible", error instanceof Error ? error.message : "Erreur inconnue.");
     } finally {
       setLoading(false);
     }
@@ -129,12 +150,22 @@ export default function LoginScreen() {
             },
           ]}
         >
-          <Text style={styles.title}>LE TICKET GAGNANT</Text>
-          <Text style={styles.subtitle}>Connectez-vous à votre lounge casino</Text>
+          <Text style={styles.badge}>NOUVEAU JOUEUR</Text>
+          <Text style={styles.title}>Créer un compte</Text>
+          <Text style={styles.subtitle}>Rejoignez le lounge et recevez vos jetons de bienvenue.</Text>
 
           <View style={styles.infoPanel}>
-            <Text style={styles.infoPanelText}>Solde, progression et tables synchronisés avec votre compte.</Text>
+            <Text style={styles.infoPanelText}>Inscription sécurisée • Profil synchronisé • Accès instantané aux tables.</Text>
           </View>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Username"
+            placeholderTextColor={casinoTheme.colors.textMuted}
+            autoCapitalize="none"
+            value={username}
+            onChangeText={setUsername}
+          />
 
           <TextInput
             style={styles.input}
@@ -155,23 +186,51 @@ export default function LoginScreen() {
             onChangeText={setPassword}
           />
 
+          {password.length > 0 ? (
+            <Text style={[styles.passwordHint, isStrongPassword ? styles.passwordHintOk : styles.passwordHintError]}>
+              {isStrongPassword
+                ? "✓ Mot de passe robuste"
+                : "✕ 8+ caractères, majuscule, minuscule, chiffre et spécial"}
+            </Text>
+          ) : null}
+
+          <TextInput
+            style={[
+              styles.input,
+              hasConfirmValue
+                ? (passwordsMatch ? styles.confirmInputOk : styles.confirmInputError)
+                : null,
+            ]}
+            placeholder="Confirmer le mot de passe"
+            placeholderTextColor={casinoTheme.colors.textMuted}
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+
+          {hasConfirmValue ? (
+            <Text style={[styles.passwordHint, passwordsMatch ? styles.passwordHintOk : styles.passwordHintError]}>
+              {passwordsMatch ? "✓ Les mots de passe correspondent" : "✕ Les mots de passe ne correspondent pas"}
+            </Text>
+          ) : null}
+
           <View style={styles.separator} />
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleRegister}
             disabled={loading}
           >
             <View style={styles.buttonGloss} />
             {loading ? (
               <ActivityIndicator color="#141824" />
             ) : (
-              <Animated.Text style={[styles.buttonText, { opacity: ctaPulse }]}>Accéder au casino</Animated.Text>
+              <Animated.Text style={[styles.buttonText, { opacity: ctaPulse }]}>S'inscrire</Animated.Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.textLink} onPress={() => router.push("/register")}>
-            <Text style={styles.textLinkLabel}>Pas encore de compte ? S'inscrire</Text>
+          <TouchableOpacity style={styles.textLink} onPress={() => router.push("/login")}> 
+            <Text style={styles.textLinkLabel}>Déjà un compte ? Se connecter</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -207,12 +266,19 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
   },
+  badge: {
+    alignSelf: "center",
+    color: "#d8b680",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
   title: {
     color: "#f1d5a4",
     fontSize: 28,
     fontWeight: "900",
     textAlign: "center",
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 14,
@@ -292,5 +358,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(214, 188, 150, 0.22)",
     marginTop: 1,
     marginBottom: 1,
+  },
+  passwordHint: {
+    marginTop: -2,
+    marginBottom: 2,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  passwordHintOk: {
+    color: "#9be8ba",
+  },
+  passwordHintError: {
+    color: "#f0a6a6",
+  },
+  confirmInputOk: {
+    borderColor: "rgba(155, 232, 186, 0.9)",
+  },
+  confirmInputError: {
+    borderColor: "rgba(240, 166, 166, 0.9)",
   },
 });

@@ -1,12 +1,12 @@
-import MinesScreen from "@/src/features/mines/screens/MinesScreen";
+import PokerScreen from "@/src/features/poker/screens/PokerScreen";
 import { useRequireAuth } from "@/src/hooks/useRequireAuth";
 
-export default function MinesRoute() {
+export default function PokerRoute() {
 	const authChecked = useRequireAuth();
 
 	if (!authChecked) {
 		return null;
 	}
 
-	return <MinesScreen />;
+	return <PokerScreen />;
 }
