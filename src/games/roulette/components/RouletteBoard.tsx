@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { rouletteTheme } from "../assets/theme";
-import { RouletteBet, RouletteBetInput, RED_NUMBERS, getBetKey } from "../utils/payouts";
+import { RED_NUMBERS, RouletteBet, RouletteBetInput, getBetKey } from "../utils/payouts";
 
 type RouletteBoardProps = {
   bets: RouletteBet[];
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   sectionTitle: {
-    color: rouletteTheme.colors.cyan,
+    color: rouletteTheme.colors.textPrimary,
     fontWeight: "900",
     fontSize: 13,
     letterSpacing: 0.7,
@@ -319,19 +319,19 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: "rgba(160,220,255,0.44)",
+    borderColor: rouletteTheme.colors.panelBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   zeroCell: {
-    backgroundColor: "rgba(35, 188, 151, 0.34)",
+    backgroundColor: "rgba(20, 132, 94, 0.45)",
     minHeight: 138,
   },
   redCell: {
-    backgroundColor: "rgba(211, 41, 100, 0.28)",
+    backgroundColor: "rgba(187, 44, 84, 0.38)",
   },
   blackCell: {
-    backgroundColor: "rgba(17, 20, 34, 0.9)",
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
   },
   numberText: {
     color: rouletteTheme.colors.textPrimary,
@@ -375,8 +375,8 @@ const styles = StyleSheet.create({
     minWidth: 80,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: "rgba(102, 214, 255, 0.65)",
-    backgroundColor: "rgba(8, 16, 34, 0.8)",
+    borderColor: rouletteTheme.colors.panelBorder,
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     paddingHorizontal: 8,
     paddingVertical: 7,
   },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   advancedTitle: {
-    color: rouletteTheme.colors.violet,
+    color: rouletteTheme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 12,
     letterSpacing: 0.7,
@@ -407,8 +407,8 @@ const styles = StyleSheet.create({
     width: 132,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: "rgba(141, 111, 255, 0.7)",
-    backgroundColor: "rgba(25, 21, 45, 0.72)",
+    borderColor: rouletteTheme.colors.panelBorder,
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     paddingHorizontal: 8,
     paddingVertical: 7,
   },

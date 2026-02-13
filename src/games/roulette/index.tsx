@@ -1,7 +1,17 @@
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
+import {
+    Animated,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    Vibration,
+    View,
+    useWindowDimensions,
+} from "react-native";
 import { rouletteTheme } from "./assets/theme";
 import { ChipSelector } from "./components/ChipSelector";
 import { RouletteBoard } from "./components/RouletteBoard";
@@ -38,6 +48,8 @@ function NeonButton({
 export default function RouletteGame() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const { width } = useWindowDimensions();
+  const isWide = width >= 980;
 
   const {
     bankroll,
@@ -53,6 +65,7 @@ export default function RouletteGame() {
     clearBets,
     doubleBets,
     spinWheel,
+    onResultGenerated,
   } = useRouletteGame(1000);
 
   const feedbackOpacity = useRef(new Animated.Value(0)).current;
@@ -98,172 +111,226 @@ export default function RouletteGame() {
     : null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
-      <View style={styles.backgroundLayerA} />
-      <View style={styles.backgroundLayerB} />
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.page}>
+        <View style={[styles.layout, isWide && styles.layoutWide]}>
+          <View style={[styles.sidebar, isWide && styles.sidebarWide]}>
+            <View style={styles.betPanel}>
+              <View style={styles.panelHeaderRow}>
+                <Text style={styles.panelTitle}>Roulette</Text>
+                <Text style={styles.panelMeta}>European</Text>
+              </View>
 
-      <View style={styles.balanceBadgeWrap}>
-        <ChipBalanceBadge userId={routeUserId} amount={bankroll} compact />
-      </View>
+              <View style={styles.infoBar}>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>Mise totale</Text>
+                  <Text style={styles.infoValue}>{totalStake}</Text>
+                </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>Jeton actif</Text>
+                  <Text style={styles.infoValue}>{selectedChip}</Text>
+                </View>
+              </View>
 
-      <Text style={styles.title}>ROULETTE ÉLECTRONIQUE</Text>
-      <Text style={styles.subtitle}>Mode immersive · European Rules</Text>
+              <Text style={styles.panelLabel}>Choisis ton jeton</Text>
+              <ChipSelector chips={DEFAULT_CHIPS} selectedChip={selectedChip} onSelect={setSelectedChip} />
+            </View>
 
-      <View style={styles.heroPanel}>
-        <View style={styles.cockpitRow}>
-          <RouletteWheel spinning={spinning} result={result} />
+            <View style={styles.actionsStack}>
+              <NeonButton
+                label="Lancer"
+                onPress={spinWheel}
+                disabled={spinning || bets.length === 0}
+              />
+              <NeonButton
+                label="Effacer"
+                onPress={clearBets}
+                disabled={spinning || bets.length === 0}
+              />
+              <NeonButton
+                label="Doubler"
+                onPress={doubleBets}
+                disabled={spinning || bets.length === 0}
+              />
+
+              {spinning ? (
+                <View style={styles.inGamePill}>
+                  <Text style={styles.inGameText}>Rien ne va plus...</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.tableArea}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={styles.tableTitle}>ROULETTE</Text>
+              <ChipBalanceBadge userId={routeUserId} amount={bankroll} compact />
+            </View>
+
+            <View style={styles.tableContent}>
+              <RouletteWheel spinning={spinning} result={result} onResultGenerated={onResultGenerated} />
+
+              <View style={styles.statsRow}>
+                <View style={styles.statPill}>
+                  <Text style={styles.statLabel}>SOLDE</Text>
+                  <Text style={styles.statValue}>{bankroll}</Text>
+                </View>
+                <View style={styles.statPill}>
+                  <Text style={styles.statLabel}>NUMÉRO</Text>
+                  <Text style={styles.statValue}>{result ?? "--"}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.historyText}>
+                Historique: {history.length > 0 ? history.join(" · ") : "-"}
+              </Text>
+
+              {feedbackText ? (
+                <Animated.View
+                  style={[
+                    styles.feedbackPill,
+                    {
+                      borderColor: feedbackColor,
+                      opacity: feedbackOpacity,
+                      transform: [{ translateY: feedbackTranslate }],
+                    },
+                  ]}
+                >
+                  <Text style={[styles.feedbackText, { color: feedbackColor }]}>{feedbackText}</Text>
+                </Animated.View>
+              ) : null}
+
+              <RouletteBoard bets={bets} disabled={spinning} onPlaceBet={placeBet} />
+            </View>
+          </View>
         </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statPill}>
-            <Text style={styles.statLabel}>MISE</Text>
-            <Text style={styles.statValue}>{totalStake}</Text>
-          </View>
-          <View style={styles.statPill}>
-            <Text style={styles.statLabel}>SOLDE</Text>
-            <Text style={styles.statValue}>{bankroll}</Text>
-          </View>
-          <View style={styles.statPill}>
-            <Text style={styles.statLabel}>NUM</Text>
-            <Text style={styles.statValue}>{result ?? "--"}</Text>
-          </View>
-          <View style={styles.statPill}>
-            <Text style={styles.statLabel}>JETON</Text>
-            <Text style={styles.statValue}>{selectedChip}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.historyText}>
-          Historique: {history.length > 0 ? history.join(" · ") : "-"}
-        </Text>
-
-        {feedbackText ? (
-          <Animated.View
-            style={[
-              styles.feedbackPill,
-              {
-                borderColor: feedbackColor,
-                opacity: feedbackOpacity,
-                transform: [{ translateY: feedbackTranslate }],
-              },
-            ]}
-          >
-            <Text style={[styles.feedbackText, { color: feedbackColor }]}>{feedbackText}</Text>
-          </Animated.View>
-        ) : null}
-      </View>
-
-      <View style={styles.glassPanel}>
-        <Text style={styles.panelLabel}>Choisis ton jeton</Text>
-        <ChipSelector chips={DEFAULT_CHIPS} selectedChip={selectedChip} onSelect={setSelectedChip} />
-      </View>
-
-      <View style={styles.controlsRow}>
-        <NeonButton
-          label="Lancer"
-          onPress={() => {
-            spinWheel();
-          }}
-          disabled={spinning || bets.length === 0}
-        />
-        <NeonButton
-          label="Effacer"
-          onPress={clearBets}
-          disabled={spinning || bets.length === 0}
-        />
-        <NeonButton
-          label="Doubler"
-          onPress={() => {
-            doubleBets();
-          }}
-          disabled={spinning || bets.length === 0}
-        />
-      </View>
-
-      <RouletteBoard bets={bets} disabled={spinning} onPlaceBet={placeBet} />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  safeArea: {
     flex: 1,
     backgroundColor: rouletteTheme.colors.background,
   },
-  screenContent: {
+  page: {
+    flexGrow: 1,
     padding: 14,
+  },
+  layout: {
+    flexDirection: "column",
+    gap: 14,
+  },
+  layoutWide: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  sidebar: {
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
+    borderRadius: rouletteTheme.radii.lg,
+    padding: 12,
     gap: 12,
-    paddingBottom: 24,
-    position: "relative",
+    borderWidth: 1,
+    borderColor: rouletteTheme.colors.panelBorder,
   },
-  balanceBadgeWrap: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 5,
+  sidebarWide: {
+    width: 360,
   },
-  backgroundLayerA: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: rouletteTheme.colors.background,
+  betPanel: {
+    gap: 10,
   },
-  backgroundLayerB: {
-    position: "absolute",
-    top: 0,
-    left: -120,
-    right: -120,
-    height: 330,
-    borderRadius: 220,
-    backgroundColor: "rgba(74, 132, 255, 0.13)",
+  panelHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  title: {
-    color: rouletteTheme.colors.cyan,
-    textAlign: "center",
-    fontSize: 27,
-    fontWeight: "900",
-    letterSpacing: 1,
-    marginTop: 4,
-    textShadowColor: "rgba(77,231,255,0.4)",
-    textShadowRadius: 10,
-    textShadowOffset: { width: 0, height: 0 },
+  panelTitle: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 28,
+    fontWeight: "700",
   },
-  subtitle: {
+  panelMeta: {
     color: rouletteTheme.colors.textSecondary,
-    textAlign: "center",
-    marginTop: -2,
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    fontSize: 14,
     fontWeight: "600",
   },
-  heroPanel: {
+  infoBar: {
+    backgroundColor: rouletteTheme.colors.panel,
+    borderRadius: rouletteTheme.radii.md,
+    borderWidth: 1,
+    borderColor: rouletteTheme.colors.panelBorder,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  infoBlock: {
+    gap: 3,
+  },
+  infoLabel: {
+    color: rouletteTheme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  infoValue: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  panelLabel: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  actionsStack: {
+    gap: 10,
+  },
+  inGamePill: {
+    borderWidth: 1,
+    borderColor: rouletteTheme.colors.panelBorder,
+    borderRadius: rouletteTheme.radii.md,
+    backgroundColor: rouletteTheme.colors.panel,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  inGameText: {
+    color: rouletteTheme.colors.cyan,
+    fontWeight: "700",
+  },
+  tableArea: {
     borderWidth: 1,
     borderColor: rouletteTheme.colors.panelBorder,
     borderRadius: rouletteTheme.radii.xl,
     backgroundColor: rouletteTheme.colors.panel,
     padding: 12,
-    gap: 6,
-    shadowColor: rouletteTheme.colors.panelGlow,
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    gap: 12,
+    flex: 1,
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  tableTitle: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 26,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  tableContent: {
+    gap: 10,
   },
   statsRow: {
     flexDirection: "row",
     gap: 8,
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  cockpitRow: {
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
   },
   statPill: {
-    minWidth: "48%",
+    flex: 1,
     borderWidth: 1,
-    borderColor: "rgba(133, 202, 255, 0.48)",
+    borderColor: rouletteTheme.colors.panelBorder,
     borderRadius: rouletteTheme.radii.md,
-    backgroundColor: "rgba(6, 11, 24, 0.74)",
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     paddingVertical: 7,
     paddingHorizontal: 8,
   },
@@ -282,13 +349,11 @@ const styles = StyleSheet.create({
   historyText: {
     color: rouletteTheme.colors.textSecondary,
     fontSize: 12,
-    marginTop: 2,
   },
   feedbackPill: {
-    marginTop: 4,
     borderWidth: 1,
     borderRadius: rouletteTheme.radii.md,
-    backgroundColor: "rgba(5, 10, 22, 0.8)",
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -297,27 +362,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.5,
   },
-  glassPanel: {
-    borderWidth: 1,
-    borderColor: rouletteTheme.colors.panelBorder,
-    borderRadius: rouletteTheme.radii.lg,
-    backgroundColor: rouletteTheme.colors.panel,
-    padding: 12,
-    gap: 8,
-  },
-  panelLabel: {
-    color: rouletteTheme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  controlsRow: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between",
-  },
   controlButton: {
-    flex: 1,
     minHeight: 48,
     borderRadius: rouletteTheme.radii.md,
     borderWidth: 1,
@@ -342,7 +387,7 @@ const styles = StyleSheet.create({
   controlButtonText: {
     color: rouletteTheme.colors.textPrimary,
     fontWeight: "900",
-    fontSize: 12,
+    fontSize: 13,
     letterSpacing: 0.5,
   },
   controlButtonHover: {

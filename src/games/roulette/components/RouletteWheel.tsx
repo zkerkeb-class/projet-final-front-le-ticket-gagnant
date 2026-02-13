@@ -1,286 +1,248 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+
 import { rouletteTheme } from "../assets/theme";
 import { BLACK_NUMBERS, RED_NUMBERS } from "../utils/payouts";
 
 type RouletteWheelProps = {
   spinning: boolean;
   result: number | null;
+  onResultGenerated?: (result: number) => void;
 };
 
 const EUROPEAN_WHEEL_ORDER = [
   0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10,
   5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
-];
+] as const;
 
-const SEGMENT_ANGLE = 360 / EUROPEAN_WHEEL_ORDER.length;
+const SLOT_COUNT = EUROPEAN_WHEEL_ORDER.length;
+const SLOT_ANGLE = 360 / SLOT_COUNT; // ~9.73°
 
-function getResultColor(number: number | null) {
-  if (number === null) return rouletteTheme.colors.textSecondary;
-  if (number === 0) return rouletteTheme.colors.cyan;
-  if (RED_NUMBERS.indexOf(number) !== -1) return rouletteTheme.colors.red;
-  if (BLACK_NUMBERS.indexOf(number) !== -1) return rouletteTheme.colors.textPrimary;
+function getPocketColor(number: number) {
+  if (number === 0) {
+    return rouletteTheme.colors.success;
+  }
+
+  if (RED_NUMBERS.includes(number)) {
+    return rouletteTheme.colors.red;
+  }
+
+  if (BLACK_NUMBERS.includes(number)) {
+    return rouletteTheme.colors.black;
+  }
+
   return rouletteTheme.colors.textSecondary;
 }
 
-export function RouletteWheel({ spinning, result }: RouletteWheelProps) {
-  const { width } = useWindowDimensions();
-  const rotorSpin = useRef(new Animated.Value(0)).current;
-  const ballSpin = useRef(new Animated.Value(0)).current;
-  const ballBounce = useRef(new Animated.Value(0)).current;
-  const ballDrop = useRef(new Animated.Value(0)).current;
-  const glossPulse = useRef(new Animated.Value(0)).current;
-  const rotorIdleDrift = useRef(new Animated.Value(0)).current;
-  const [lockAngle, setLockAngle] = useState(0);
+function getResultColor(number: number | null) {
+  if (number === null) {
+    return rouletteTheme.colors.textSecondary;
+  }
 
-  const resultColor = useMemo(() => getResultColor(result), [result]);
+  return getPocketColor(number);
+}
+
+export function RouletteWheel({ spinning, result, onResultGenerated }: RouletteWheelProps) {
+  const { width } = useWindowDimensions();
+
+  const [settledResult, setSettledResult] = useState<number | null>(null);
+
+  // ========== PRINCIPE D'ACCUMULATION ==========
+  // On ne remet JAMAIS ces valeurs à zéro - elles accumulent les degrés
+  const wheelRotationDegrees = useRef(0);
+  const ballRotationDegrees = useRef(0);
+
+  // Animated values
+  const wheelAngle = useRef(new Animated.Value(0)).current;
+  const ballAngle = useRef(new Animated.Value(0)).current;
+  const ballLane = useRef(new Animated.Value(0)).current;
+
+  const previousSpinningRef = useRef(false);
+
   const wheelSize = useMemo(() => {
     const available = width - 44;
-    const clamped = Math.max(250, Math.min(334, available));
-    return clamped;
+    return Math.max(250, Math.min(330, available));
   }, [width]);
-  const wheelScale = wheelSize / 334;
 
-  const rotorRotation = rotorSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "1820deg"],
+  const wheelScale = wheelSize / 330;
+
+  // Interpolations simples: degrés → rotation CSS
+  const wheelRotation = wheelAngle.interpolate({
+    inputRange: [0, 360],
+    outputRange: ["0deg", "360deg"],
+    extrapolate: "extend", // Permet d'accumuler au-delà de 360°
   });
 
-  const rotorIdleRotation = rotorIdleDrift.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "16deg"],
+  const ballRotation = ballAngle.interpolate({
+    inputRange: [0, 360],
+    outputRange: ["0deg", "360deg"],
+    extrapolate: "extend", // Permet d'accumuler au-delà de 360°
   });
 
-  const ballRailRotation = ballSpin.interpolate({
+  const ballLaneOffset = ballLane.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", "-2620deg"],
+    outputRange: [0, 90], // Descente de la bille
   });
 
-  const lockRailRotation = ballSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", `${-2620 + lockAngle}deg`],
-  });
+  const resultColor = useMemo(() => getResultColor(settledResult), [settledResult]);
 
-  const glossOpacity = glossPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.18, 0.55],
-  });
+  const winningIndex = useMemo(() => {
+    if (settledResult === null) {
+      return null;
+    }
+    const index = (EUROPEAN_WHEEL_ORDER as readonly number[]).indexOf(settledResult);
+    return index >= 0 ? index : 0;
+  }, [settledResult]);
 
-  const ballLift = ballBounce.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -8],
-  });
-
-  const ballDropDepth = ballDrop.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 18],
-  });
-
+  // ========== LOGIQUE DU POINTEUR FIXE ==========
+  // La bille s'arrête TOUJOURS en haut (0°)
+  // On fait tourner la roue pour amener le bon numéro sous la bille
+  
+  // Animation immédiate quand spinning démarre
   useEffect(() => {
-    if (!spinning) return;
+    const justStartedSpinning = !previousSpinningRef.current && spinning;
+    previousSpinningRef.current = spinning;
 
-    rotorSpin.setValue(0);
-    ballSpin.setValue(0);
-    ballBounce.setValue(0);
-    ballDrop.setValue(0);
-    rotorIdleDrift.stopAnimation();
+    if (!justStartedSpinning) {
+      return;
+    }
 
-    Animated.timing(rotorSpin, {
-      toValue: 1,
-      duration: 2200,
-      easing: Easing.bezier(0.15, 0.86, 0.18, 1),
-      useNativeDriver: true,
-    }).start();
+    // Cacher le numéro pendant que la roue tourne
+    setSettledResult(null);
 
-    Animated.sequence([
-      Animated.timing(ballSpin, {
-        toValue: 0.76,
-        duration: 1350,
-        easing: Easing.bezier(0.08, 0.92, 0.22, 1),
+    // ===== RÉINITIALISATION : Remettre tout à 0 comme au premier tour =====
+    wheelRotationDegrees.current = 0;
+    ballRotationDegrees.current = 0;
+    wheelAngle.setValue(0);
+    ballAngle.setValue(0);
+
+    // ===== CONFIGURATION =====
+    const nbSegments = 37; // Roulette européenne
+    const tailleSegment = 360 / nbSegments; // ≈ 9.73° par case
+    const wheelSpins = 5; // Nombre de tours de la roue
+    const ballSpins = 10; // Nombre de tours de la bille
+    
+    // VARIABLE MAGIQUE DE CALIBRAGE (ajuster si décalage)
+    const CORRECTION = 0;
+
+    // ===== GÉNÉRATION DU RÉSULTAT =====
+    // Angle aléatoire où la bille s'arrête (0-360°)
+    const offset = Math.floor(Math.random() * 360);
+    
+    // Générer le numéro gagnant (0-36)
+    const winningNumber = Math.floor(Math.random() * 37);
+    
+    // Envoyer le résultat au parent (hook) pour les calculs de gains
+    if (onResultGenerated) {
+      onResultGenerated(winningNumber);
+    }
+
+    // ===== CALCUL DE LA POSITION DU GAGNANT =====
+    // Trouver l'index du gagnant dans l'ordre de la roue
+    const indexGagnant = (EUROPEAN_WHEEL_ORDER as readonly number[]).indexOf(winningNumber);
+    
+    // Position de la case gagnante sur la roue (ex: case 0 est à 0°, case 1 à 9.73°, etc.)
+    const angleDuGagnant = indexGagnant * tailleSegment;
+
+    // ===== CALCUL SIMPLIFIÉ (on part toujours de 0) =====
+    // Position cible (où la bille s'arrête)
+    const positionCible = offset;
+    
+    // Rotation nécessaire pour amener le gagnant à la cible
+    const rotationRoue = (positionCible - angleDuGagnant + CORRECTION) + (wheelSpins * 360);
+    
+    // Position finale de la roue
+    const newWheelDegrees = rotationRoue;
+
+    // ===== BILLE (tourne dans le sens inverse) =====
+    // La bille fait ses tours et finit à la position offset
+    const rotationBille = (-360 * ballSpins) + offset;
+    const newBallDegrees = rotationBille;
+
+    console.log(`[Roulette] RESET à 0 | Résultat: ${winningNumber} (index ${indexGagnant}, angle ${angleDuGagnant.toFixed(1)}°) | Offset: ${offset}° | CORRECTION: ${CORRECTION}° | Roue: ${newWheelDegrees.toFixed(1)}° | Bille: ${newBallDegrees.toFixed(1)}°`);
+
+    // La bille reste à distance fixe - pas de descente
+    ballLane.setValue(0);
+
+    // Animation - SANS la descente de la bille
+    Animated.parallel([
+      Animated.timing(wheelAngle, {
+        toValue: newWheelDegrees,
+        duration: 3500,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.timing(ballDrop, {
-        toValue: 1,
-        duration: 300,
-        easing: Easing.inOut(Easing.quad),
+      Animated.timing(ballAngle, {
+        toValue: newBallDegrees,
+        duration: 3500,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.timing(ballBounce, {
-        toValue: 1,
-        duration: 120,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.timing(ballBounce, {
-        toValue: 0,
-        duration: 130,
-        easing: Easing.in(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.timing(ballSpin, {
-        toValue: 1,
-        duration: 400,
-        easing: Easing.bezier(0.2, 0.14, 0.28, 1),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [spinning, rotorSpin, ballSpin, ballBounce, ballDrop, rotorIdleDrift]);
+    ]).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
 
-  useEffect(() => {
-    if (result === null) return;
-
-    const index = EUROPEAN_WHEEL_ORDER.indexOf(result);
-    const resolvedIndex = index >= 0 ? index : 0;
-    setLockAngle(resolvedIndex * SEGMENT_ANGLE);
-
-    if (spinning) return;
-
-    ballBounce.setValue(0);
-    Animated.sequence([
-      Animated.timing(ballBounce, {
-        toValue: 1,
-        duration: 130,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.timing(ballBounce, {
-        toValue: 0,
-        duration: 180,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [result, spinning, ballBounce]);
-
-  useEffect(() => {
-    if (spinning) return;
-
-    rotorIdleDrift.setValue(0);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(rotorIdleDrift, {
-          toValue: 1,
-          duration: 2800,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(rotorIdleDrift, {
-          toValue: 0,
-          duration: 2800,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [spinning, rotorIdleDrift]);
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glossPulse, {
-          toValue: 1,
-          duration: spinning ? 320 : 1100,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glossPulse, {
-          toValue: 0,
-          duration: spinning ? 320 : 1100,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    pulse.start();
-    return () => pulse.stop();
-  }, [spinning, glossPulse]);
+      // Sauvegarder pour le prochain spin
+      wheelRotationDegrees.current = newWheelDegrees;
+      ballRotationDegrees.current = newBallDegrees;
+      
+      // Afficher le résultat À LA FIN de l'animation
+      setSettledResult(winningNumber);
+    });
+  }, [spinning, wheelAngle, ballAngle, ballLane]);
 
   return (
-    <View style={[styles.container, { width: wheelSize, height: wheelSize }]}> 
-      <View style={[styles.baseStage, { transform: [{ scale: wheelScale }] }]}>
-        <View style={styles.shadowHalo} />
-        <Animated.View style={[styles.glossHalo, { opacity: glossOpacity }]} />
-
-        <View style={styles.topPointer} />
-        <View style={styles.topPointerCore} />
-
-        <View style={styles.outerBowl}>
-          <View style={styles.woodRing} />
-          <View style={styles.goldRail} />
-        </View>
-
-        <Animated.View style={[styles.outerRail, { transform: [{ rotate: ballRailRotation }] }]}>
-          <Animated.View
-            style={[
-              styles.ballCarrier,
-              {
-                transform: [{ translateY: ballLift }, { translateY: ballDropDepth }],
-              },
-            ]}
-          >
-            <View style={styles.ballTrail} />
-            <View style={styles.ballCore} />
-            <View style={styles.ballShine} />
-          </Animated.View>
-        </Animated.View>
-
-        <Animated.View style={[styles.outerRail, styles.lockRail, { transform: [{ rotate: lockRailRotation }] }]}>
-          <View style={styles.lockMarker} />
-        </Animated.View>
-
-        <Animated.View style={[styles.rotor, { transform: [{ rotate: rotorRotation }, { rotate: rotorIdleRotation }] }]}>
-          <View style={styles.woodTexture} />
-          <View style={styles.woodTextureAlt} />
-          <View style={styles.depthShadow} />
-          <View style={styles.innerGoldRing} />
-          <View style={styles.tickRing}>
-            {EUROPEAN_WHEEL_ORDER.map((_, index) => {
-              const angle = index * SEGMENT_ANGLE;
-              return (
-                <View
-                  key={`tick-${index}`}
-                  style={[
-                    styles.tick,
-                    {
-                      transform: [{ rotate: `${angle}deg` }, { translateY: -98 }],
-                    },
-                  ]}
-                />
-              );
-            })}
-          </View>
-          <View style={styles.segmentRing}>
-            {EUROPEAN_WHEEL_ORDER.map((n, index) => {
-              const angle = index * SEGMENT_ANGLE;
-              const cellColor =
-                n === 0 ? "#0f6b4f" : RED_NUMBERS.indexOf(n) !== -1 ? "#8f122c" : "#111318";
+    <View style={[styles.container, { width: wheelSize, height: wheelSize }]}>
+      <View style={[styles.stage, { transform: [{ scale: wheelScale }] }]}>
+        <View style={styles.outerRing}>
+          <Animated.View style={[styles.wheel, { transform: [{ rotate: wheelRotation }] }]}>
+            {EUROPEAN_WHEEL_ORDER.map((number, index) => {
+              const angle = index * SLOT_ANGLE;
+              const isWinning = winningIndex === index && !spinning;
 
               return (
                 <View
-                  key={n}
+                  key={number}
                   style={[
-                    styles.segmentCell,
+                    styles.slotWrap,
                     {
-                      transform: [{ rotate: `${angle}deg` }, { translateY: -96 }, { rotate: `${-angle}deg` }],
+                      transform: [{ rotate: `${angle}deg` }, { translateY: -106 }],
                     },
                   ]}
                 >
-                  <View style={[styles.segmentPlate, { backgroundColor: cellColor }]}>
-                    <Text style={styles.segmentText}>{n}</Text>
+                  <View
+                    style={[
+                      styles.slot,
+                      { backgroundColor: getPocketColor(number) },
+                      isWinning ? styles.slotWinning : null,
+                    ]}
+                  >
+                    <Text style={styles.slotText}>{number}</Text>
                   </View>
                 </View>
               );
             })}
-          </View>
 
-          <View style={styles.centerCap}>
-            <Text style={styles.centerText}>EUROPE</Text>
-          </View>
+            <View style={styles.centerCap}>
+              <Text style={styles.centerCapText}>EU</Text>
+            </View>
+          </Animated.View>
+        </View>
+
+        <Animated.View style={[styles.ballOrbit, { transform: [{ rotate: ballRotation }] }]}>
+          <Animated.View
+            style={[
+              styles.ball,
+              {
+                transform: [{ translateY: ballLaneOffset }],
+              },
+            ]}
+          />
         </Animated.View>
 
         <View style={[styles.resultBadge, { borderColor: resultColor }]}>
-          <Text style={[styles.resultText, { color: resultColor }]}>{result ?? "--"}</Text>
+          <Text style={[styles.resultText, { color: resultColor }]}>{settledResult ?? "--"}</Text>
         </View>
       </View>
     </View>
@@ -289,258 +251,119 @@ export function RouletteWheel({ spinning, result }: RouletteWheelProps) {
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: "center",
-    justifyContent: "center",
     alignSelf: "center",
-    marginBottom: 12,
-  },
-  baseStage: {
-    width: 334,
-    height: 334,
     alignItems: "center",
     justifyContent: "center",
   },
-  shadowHalo: {
-    position: "absolute",
-    width: 316,
-    height: 316,
-    borderRadius: 158,
-    backgroundColor: "rgba(0,0,0,0.34)",
-  },
-  glossHalo: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "rgba(255, 228, 170, 0.18)",
-  },
-  topPointer: {
-    position: "absolute",
-    top: 9,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 11,
-    borderRightWidth: 11,
-    borderBottomWidth: 21,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#f0d18a",
-    zIndex: 20,
-  },
-  topPointerCore: {
-    position: "absolute",
-    top: 26,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#fff6d2",
-    zIndex: 20,
-  },
-  outerBowl: {
-    position: "absolute",
-    width: 318,
-    height: 318,
-    borderRadius: 159,
+  stage: {
+    width: 330,
+    height: 330,
     alignItems: "center",
     justifyContent: "center",
   },
-  woodRing: {
-    position: "absolute",
-    width: 318,
-    height: 318,
-    borderRadius: 159,
-    backgroundColor: "#4e2f1d",
-    borderWidth: 6,
-    borderColor: "#2c1a10",
-  },
-  goldRail: {
+  outerRing: {
     width: 286,
     height: 286,
     borderRadius: 143,
     borderWidth: 2,
-    borderColor: "#e6bc62",
-    backgroundColor: "rgba(22, 14, 8, 0.72)",
-  },
-  outerRail: {
-    position: "absolute",
-    width: 282,
-    height: 282,
-    borderRadius: 141,
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
-  lockRail: {
-    width: 276,
-    height: 276,
-    borderRadius: 138,
-  },
-  lockMarker: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginTop: 18,
-    backgroundColor: "#f1d99b",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-  ballCarrier: {
-    marginTop: 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    borderColor: rouletteTheme.colors.gold,
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     alignItems: "center",
     justifyContent: "center",
   },
-  ballTrail: {
-    position: "absolute",
-    width: 12,
-    height: 20,
-    borderRadius: 10,
-    top: -1,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    transform: [{ translateY: -9 }],
+  wheel: {
+    width: 264,
+    height: 264,
+    borderRadius: 132,
+    borderWidth: 1,
+    borderColor: rouletteTheme.colors.panelBorder,
+    backgroundColor: rouletteTheme.colors.background,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  ballCore: {
+  slotWrap: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    marginLeft: -10,
+    marginTop: -32,
+  },
+  slot: {
+    width: 20,
+    height: 62,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: rouletteTheme.colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  slotWinning: {
+    borderColor: rouletteTheme.colors.gold,
+    shadowColor: rouletteTheme.colors.gold,
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  slotText: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  ballOrbit: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    zIndex: 18,
+  },
+  ball: {
+    marginTop: 8,
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#f5f0e7",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#1a1f2e",
     shadowColor: "#ffffff",
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.75,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 5,
-  },
-  ballShine: {
-    position: "absolute",
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    top: 3,
-    left: 3,
-    backgroundColor: "rgba(255,255,255,0.92)",
-  },
-  rotor: {
-    width: 268,
-    height: 268,
-    borderRadius: 134,
-    borderWidth: 2,
-    borderColor: "#e6bc62",
-    backgroundColor: "#3d2415",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  woodTexture: {
-    position: "absolute",
-    width: 268,
-    height: 268,
-    borderRadius: 134,
-    backgroundColor: "rgba(133, 79, 47, 0.34)",
-  },
-  woodTextureAlt: {
-    position: "absolute",
-    width: 252,
-    height: 252,
-    borderRadius: 126,
-    backgroundColor: "rgba(38, 22, 13, 0.35)",
-  },
-  depthShadow: {
-    position: "absolute",
-    width: 268,
-    height: 268,
-    borderRadius: 134,
-    backgroundColor: "rgba(0,0,0,0.2)",
-  },
-  innerGoldRing: {
-    position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 1,
-    borderColor: "#eacb82",
-  },
-  tickRing: {
-    width: 248,
-    height: 248,
-    borderRadius: 124,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "absolute",
-  },
-  tick: {
-    position: "absolute",
-    width: 2,
-    height: 10,
-    borderRadius: 2,
-    backgroundColor: "#f1d59a",
-  },
-  segmentRing: {
-    width: 248,
-    height: 248,
-    borderRadius: 124,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentCell: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentPlate: {
-    minWidth: 22,
-    height: 14,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#f0c97d",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 2,
-  },
-  segmentText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#ffffff",
-    fontFamily: "serif",
-    textShadowColor: "rgba(0,0,0,0.55)",
-    textShadowRadius: 2,
-    textShadowOffset: { width: 0, height: 0 },
+    elevation: 8,
   },
   centerCap: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "#f0d189",
-    backgroundColor: "#a6762e",
+    borderColor: rouletteTheme.colors.gold,
+    backgroundColor: rouletteTheme.colors.backgroundAlt,
     alignItems: "center",
     justifyContent: "center",
-    ...rouletteTheme.shadows.gold,
   },
-  centerText: {
-    color: "#fff6e5",
-    fontSize: 11,
+  centerCapText: {
+    color: rouletteTheme.colors.textPrimary,
+    fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.8,
-    fontFamily: "serif",
+    letterSpacing: 0.5,
   },
   resultBadge: {
     position: "absolute",
-    right: 10,
-    bottom: 12,
-    minWidth: 62,
-    height: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: "rgba(20, 13, 8, 0.9)",
+    bottom: 8,
+    minWidth: 52,
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 17,
+    borderWidth: 2,
+    backgroundColor: rouletteTheme.colors.background,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
   },
   resultText: {
+    fontSize: 16,
     fontWeight: "900",
-    fontSize: 20,
+    letterSpacing: 0.4,
   },
 });

@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
-  calculateTotalReturn,
-  calculateTotalStake,
-  getBetKey,
-  RouletteBet,
-  RouletteBetInput,
+    calculateTotalReturn,
+    calculateTotalStake,
+    getBetKey,
+    RouletteBet,
+    RouletteBetInput,
 } from "../utils/payouts";
 
 export const DEFAULT_CHIPS = [1, 5, 10, 25, 100] as const;
@@ -46,6 +46,7 @@ export function useRouletteGame(initialBankroll = 1000) {
   const [result, setResult] = useState<number | null>(null);
   const [history, setHistory] = useState<number[]>([]);
   const [lastSpin, setLastSpin] = useState<RouletteGameState["lastSpin"]>(null);
+  const animationResultRef = useRef<number | null>(null);
 
   const totalStake = useMemo(() => calculateTotalStake(bets), [bets]);
 
@@ -123,6 +124,7 @@ export function useRouletteGame(initialBankroll = 1000) {
     if (spinning || bets.length === 0) return false;
 
     setSpinning(true);
+    animationResultRef.current = null; // Reset pour le prochain spin
     const currentBets = [...bets];
     const currentBankroll = bankroll;
 
@@ -130,26 +132,13 @@ export function useRouletteGame(initialBankroll = 1000) {
 
     setTimeout(() => {
       pendingRemoteSpin.then((remoteSpin) => {
-        if (remoteSpin) {
-          setBankroll((previous: number) => previous + remoteSpin.totalReturn);
-          setResult(remoteSpin.resultNumber);
-          setHistory((previous: number[]) => [remoteSpin.resultNumber, ...previous].slice(0, HISTORY_LIMIT));
-          setLastSpin({
-            result: remoteSpin.resultNumber,
-            totalStake: remoteSpin.totalStake,
-            totalReturn: remoteSpin.totalReturn,
-            net: remoteSpin.net,
-            isWin: remoteSpin.totalReturn > 0,
-          });
-          setBets([]);
-          setSpinning(false);
-          return;
-        }
-
-        const spinResult = Math.floor(Math.random() * 37);
+        // Utiliser le résultat de l'animation au lieu du backend
+        const spinResult = animationResultRef.current ?? Math.floor(Math.random() * 37);
         const spinStake = calculateTotalStake(currentBets);
         const wonAmount = calculateTotalReturn(currentBets, spinResult);
         const net = wonAmount - spinStake;
+
+        console.log(`[Hook] Using animation result: ${animationResultRef.current} → final: ${spinResult}`);
 
         setBankroll((previous: number) => previous + wonAmount);
         setResult(spinResult);
@@ -167,6 +156,11 @@ export function useRouletteGame(initialBankroll = 1000) {
     }, 2200);
 
     return true;
+  }
+
+  function handleResultGenerated(generatedResult: number) {
+    console.log(`[Hook] Received animation result: ${generatedResult}`);
+    animationResultRef.current = generatedResult;
   }
 
   const gameState: RouletteGameState = {
@@ -187,5 +181,6 @@ export function useRouletteGame(initialBankroll = 1000) {
     clearBets,
     doubleBets,
     spinWheel,
+    onResultGenerated: handleResultGenerated,
   };
 }
