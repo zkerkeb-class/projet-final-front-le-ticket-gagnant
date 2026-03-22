@@ -1,5 +1,9 @@
 # Le Ticket Gagnant
 
+## Video de presentation
+
+https://www.youtube.com/watch?v=cNSCr_I2vnk
+
 Projet academique de casino social realise avec Expo Router, React Native et TypeScript.
 
 ## Objectif
