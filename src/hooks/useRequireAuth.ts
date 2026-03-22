@@ -22,7 +22,8 @@ export const useRequireAuth = (): boolean => {
         const token = await authStorage.getToken();
 
         if (!token) {
-          Alert.alert("Session expirée", "Veuillez vous reconnecter pour accéder à cette page.");
+          await authStorage.clearSession();
+          Alert.alert("Session expiree", "Veuillez vous reconnecter pour acceder a cette page.");
           router.replace("/login");
           return;
         }
@@ -31,7 +32,8 @@ export const useRequireAuth = (): boolean => {
           setReady(true);
         }
       } catch {
-        Alert.alert("Session invalide", "Impossible de vérifier la session. Reconnectez-vous.");
+        await authStorage.clearSession();
+        Alert.alert("Session invalide", "Impossible de verifier la session. Reconnectez-vous.");
         router.replace("/login");
       } finally {
         guardInProgressRef.current = false;

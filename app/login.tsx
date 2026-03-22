@@ -1,50 +1,28 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
+  ActivityIndicator,
+  Alert,
   Animated,
   Easing,
-    KeyboardAvoidingView,
+  KeyboardAvoidingView,
   Platform,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
+import { useRedirectIfAuthenticated } from "@/src/hooks/useRedirectIfAuthenticated";
 import PremiumBackground from "@/src/components/PremiumBackground";
 import { authApi } from "@/src/services/authApi";
 import { authStorage } from "@/src/services/authStorage";
+import { normalizeEmail, validateLoginInput } from "@/src/services/authValidation";
 import { casinoTheme } from "@/src/theme/casinoTheme";
-
-const withAlpha = (hex: string, alpha: number): string => {
-  const rgba = hex.match(/^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)$/i);
-  if (rgba) {
-    const red = Number.parseInt(rgba[1], 10);
-    const green = Number.parseInt(rgba[2], 10);
-    const blue = Number.parseInt(rgba[3], 10);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-  }
-
-  const safeHex = hex.replace("#", "");
-  const value = safeHex.length === 3
-    ? safeHex.split("").map((char) => char + char).join("")
-    : safeHex;
-
-  const red = Number.parseInt(value.slice(0, 2), 16);
-  const green = Number.parseInt(value.slice(2, 4), 16);
-  const blue = Number.parseInt(value.slice(4, 6), 16);
-
-  if ([red, green, blue].some((channel) => Number.isNaN(channel))) {
-    return `rgba(255,255,255,${alpha})`;
-  }
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-};
 
 export default function LoginScreen() {
   const router = useRouter();
+  const checkingSession = useRedirectIfAuthenticated();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,15 +65,16 @@ export default function LoginScreen() {
   }, [cardFade, cardY, ctaPulse]);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs.");
+    const validationError = validateLoginInput(email, password);
+    if (validationError) {
+      Alert.alert("Erreur", validationError);
       return;
     }
 
     try {
       setLoading(true);
 
-      const payload = await authApi.login(email, password);
+      const payload = await authApi.login(normalizeEmail(email), password);
       await authStorage.setSession(payload.token, payload.user);
 
       router.replace({
@@ -111,6 +90,14 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <View style={styles.container}>
+        <PremiumBackground />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -130,10 +117,10 @@ export default function LoginScreen() {
           ]}
         >
           <Text style={styles.title}>LE TICKET GAGNANT</Text>
-          <Text style={styles.subtitle}>Connectez-vous à votre lounge casino</Text>
+          <Text style={styles.subtitle}>Connectez-vous a votre lounge casino</Text>
 
           <View style={styles.infoPanel}>
-            <Text style={styles.infoPanelText}>Solde, progression et tables synchronisés avec votre compte.</Text>
+            <Text style={styles.infoPanelText}>Solde, progression et tables synchronises avec votre compte.</Text>
           </View>
 
           <TextInput
@@ -166,7 +153,7 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color="#141824" />
             ) : (
-              <Animated.Text style={[styles.buttonText, { opacity: ctaPulse }]}>Accéder au casino</Animated.Text>
+              <Animated.Text style={[styles.buttonText, { opacity: ctaPulse }]}>Acceder au casino</Animated.Text>
             )}
           </TouchableOpacity>
 

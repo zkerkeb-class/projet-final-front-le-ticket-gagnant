@@ -66,6 +66,10 @@ const parseOptionalPositive = (value: string): number | null => {
   return parsed;
 };
 
+const isOptionalPositiveValid = (value: number | null): boolean => (
+  value === null || (Number.isFinite(value) && !Number.isNaN(value))
+);
+
 export default function CrashScreen() {
   const params = useLocalSearchParams<{ userId?: string | string[] }>();
   const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
@@ -98,7 +102,7 @@ export default function CrashScreen() {
     for (const baseUrl of baseUrls) {
       try {
         const response = await fetch(`${baseUrl}${path}`, {
-          method: path === "/state" ? "POST" : "POST",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
@@ -126,7 +130,7 @@ export default function CrashScreen() {
     const bet = parsePositive(betInput);
     const auto = parseOptionalPositive(autoCashoutInput);
 
-    return Number.isFinite(bet) && !Number.isNaN(auto ?? Number.NaN) && !loading;
+    return Number.isFinite(bet) && isOptionalPositiveValid(auto) && !loading;
   }, [autoCashoutInput, betInput, loading]);
 
   const stopAnimationLoop = () => {
@@ -205,7 +209,7 @@ export default function CrashScreen() {
     const bet = parsePositive(betInput);
     const auto = parseOptionalPositive(autoCashoutInput);
 
-    if (!Number.isFinite(bet) || Number.isNaN(auto ?? Number.NaN)) {
+    if (!Number.isFinite(bet) || !isOptionalPositiveValid(auto)) {
       const message = "Mise ou auto-cashout invalide (auto > 1).";
       setErrorMessage(message);
       Alert.alert("Paramètres invalides", message);
@@ -291,6 +295,13 @@ export default function CrashScreen() {
   };
 
   const rocketPosition = getCurvePosition(visualFlightProgress);
+  const rocketAngle = (() => {
+    const t = Math.max(0.0001, Math.min(1, visualFlightProgress));
+    const dx = curveSpanX;
+    const dy = -(curveSpanY * curveExponent * Math.pow(t, curveExponent - 1));
+
+    return (Math.atan2(dx, -dy) * 180) / Math.PI;
+  })();
 
   const curvePoints = useMemo(
     () => Array.from({ length: 28 }, (_, index) => {
@@ -451,7 +462,7 @@ export default function CrashScreen() {
                         {
                           left: `${rocketPosition.x}%` as `${number}%`,
                           top: `${rocketPosition.y}%` as `${number}%`,
-                          transform: [{ rotate: `${-18 - rocketProgress * 22}deg` }],
+                          transform: [{ rotate: `${rocketAngle}deg` }],
                         },
                       ]}
                     >

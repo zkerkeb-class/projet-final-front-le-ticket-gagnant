@@ -1,12 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Animated, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import PremiumBackground from "@/src/components/PremiumBackground";
 import { useRequireAuth } from "@/src/hooks/useRequireAuth";
-import { authStorage } from "@/src/services/authStorage";
+import { authStorage, StoredUser } from "@/src/services/authStorage";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
 const FALLBACK_USER_ID = process.env.EXPO_PUBLIC_USER_ID ?? "";
@@ -36,10 +36,12 @@ export default function HomeScreen() {
   const heroFade = useRef(new Animated.Value(0)).current;
   const heroY = useRef(new Animated.Value(16)).current;
   const cardsProgress = useRef(new Animated.Value(0)).current;
+  const [storedUser, setStoredUser] = useState<StoredUser | null>(null);
 
-  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  const username = Array.isArray(params.username) ? params.username[0] : params.username;
-  const resolvedUserId = userId ?? FALLBACK_USER_ID;
+  const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const routeUsername = Array.isArray(params.username) ? params.username[0] : params.username;
+  const resolvedUserId = storedUser?.id ?? routeUserId ?? FALLBACK_USER_ID;
+  const resolvedUsername = storedUser?.username ?? routeUsername ?? "";
 
   const handleLogout = useCallback(async () => {
     await authStorage.clearSession();
@@ -121,12 +123,33 @@ export default function HomeScreen() {
             <Text style={styles.headerProfileText}>Mon compte</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerLogoutButton} onPress={() => void handleLogout()}>
-            <Text style={styles.headerLogoutText}>Se déconnecter</Text>
+            <Text style={styles.headerLogoutText}>Se deconnecter</Text>
           </TouchableOpacity>
         </View>
       ),
     });
   }, [navigation, handleOpenProfile, handleLogout]);
+
+  useEffect(() => {
+    if (!authChecked) {
+      return;
+    }
+
+    let mounted = true;
+
+    const loadStoredUser = async () => {
+      const user = await authStorage.getUser();
+      if (mounted) {
+        setStoredUser(user);
+      }
+    };
+
+    void loadStoredUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authChecked]);
 
   useEffect(() => {
     Animated.parallel([
@@ -162,9 +185,9 @@ export default function HomeScreen() {
   const gameCards = [
     {
       key: "blackjack",
-      icon: "🂡",
+      icon: "\u{1F0A1}",
       title: "BLACKJACK",
-      subtitle: "Cartes & décisions",
+      subtitle: "Cartes et decisions",
       border: "rgba(176, 110, 102, 0.8)",
       blobA: "rgba(130, 82, 76, 0.4)",
       blobB: "rgba(89, 70, 120, 0.3)",
@@ -173,7 +196,7 @@ export default function HomeScreen() {
     },
     {
       key: "ladder",
-      icon: "🪜",
+      icon: "\u{1FA9C}",
       title: "LUCKY LADDER",
       subtitle: "Montez ou tombez",
       border: "rgba(122, 98, 165, 0.82)",
@@ -184,7 +207,7 @@ export default function HomeScreen() {
     },
     {
       key: "crash",
-      icon: "🚀",
+      icon: "\u{1F680}",
       title: "CRASH",
       subtitle: "Cashout avant chute",
       border: "rgba(173, 136, 93, 0.8)",
@@ -195,9 +218,9 @@ export default function HomeScreen() {
     },
     {
       key: "roulette",
-      icon: "🎯",
+      icon: "\u{1F3AF}",
       title: "ROULETTE",
-      subtitle: "Table électro",
+      subtitle: "Table electro",
       border: "rgba(196, 161, 103, 0.82)",
       blobA: "rgba(141, 115, 72, 0.34)",
       blobB: "rgba(126, 79, 76, 0.22)",
@@ -206,7 +229,7 @@ export default function HomeScreen() {
     },
     {
       key: "mines",
-      icon: "💣",
+      icon: "\u{1F4A3}",
       title: "MINES",
       subtitle: "Risque progressif",
       border: "rgba(140, 149, 106, 0.82)",
@@ -217,7 +240,7 @@ export default function HomeScreen() {
     },
     {
       key: "poker",
-      icon: "🃏",
+      icon: "\u{1F0CF}",
       title: "POKER",
       subtitle: "Texas Hold'em Pro",
       border: "rgba(186, 152, 98, 0.8)",
@@ -228,7 +251,7 @@ export default function HomeScreen() {
     },
     {
       key: "baccarat",
-      icon: "🃟",
+      icon: "\u{1F0B1}",
       title: "BACCARAT",
       subtitle: "Player / Banker / Tie",
       border: "rgba(145, 120, 191, 0.82)",
@@ -244,89 +267,87 @@ export default function HomeScreen() {
       <PremiumBackground />
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-
-      <Animated.View style={[styles.heroCard, { opacity: heroFade, transform: [{ translateY: heroY }] }] }>
-        <View style={styles.heroTopRow}>
-          <Text style={styles.heroBadge}>LOUNGE LIVE</Text>
-          <View style={styles.heroBalanceWrap}>
-            <ChipBalanceBadge userId={resolvedUserId} />
+        <Animated.View style={[styles.heroCard, { opacity: heroFade, transform: [{ translateY: heroY }] }]}>
+          <View style={styles.heroTopRow}>
+            <Text style={styles.heroBadge}>LOUNGE LIVE</Text>
+            <View style={styles.heroBalanceWrap}>
+              <ChipBalanceBadge userId={resolvedUserId} />
+            </View>
           </View>
-        </View>
-        <Text style={styles.title}>🎰 Bienvenue au Casino !</Text>
-        {username ? <Text style={styles.subtitle}>Connecté en tant que {username}</Text> : null}
-        <Text style={styles.heroHint}>Choisissez votre table et lancez votre session premium.</Text>
-      </Animated.View>
+          <Text style={styles.title}>Bienvenue au casino</Text>
+          {resolvedUsername ? <Text style={styles.subtitle}>Connecte en tant que {resolvedUsername}</Text> : null}
+          <Text style={styles.heroHint}>Choisissez votre table et lancez votre session premium.</Text>
+        </Animated.View>
 
-      <View style={styles.gamesContainer}>
-        <View style={styles.sectionShell}>
-          <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Jeux disponibles</Text>
-          <View style={styles.sectionBadge}>
-            <Text style={styles.sectionBadgeText}>MODE VIP</Text>
+        <View style={styles.gamesContainer}>
+          <View style={styles.sectionShell}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Jeux disponibles</Text>
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>MODE VIP</Text>
+              </View>
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statPill}><Text style={styles.statPillText}>12 tables live</Text></View>
+              <View style={styles.statPill}><Text style={styles.statPillText}>Tournois actifs</Text></View>
+              <View style={styles.statPill}><Text style={styles.statPillText}>Multiplicateurs x20</Text></View>
+            </View>
           </View>
-        </View>
 
-          <View style={styles.statsRow}>
-            <View style={styles.statPill}><Text style={styles.statPillText}>12 tables live</Text></View>
-            <View style={styles.statPill}><Text style={styles.statPillText}>Tournois actifs</Text></View>
-            <View style={styles.statPill}><Text style={styles.statPillText}>Multiplicateurs x20</Text></View>
-          </View>
-        </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.gamesRow}
+          >
+            {gameCards.map((game, index) => {
+              const start = index * 0.08;
+              const end = Math.min(start + 0.35, 1);
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.gamesRow}
-        >
-          {gameCards.map((game, index) => {
-            const start = index * 0.08;
-            const end = Math.min(start + 0.35, 1);
+              const opacity = cardsProgress.interpolate({
+                inputRange: [start, end],
+                outputRange: [0, 1],
+                extrapolate: "clamp",
+              });
 
-            const opacity = cardsProgress.interpolate({
-              inputRange: [start, end],
-              outputRange: [0, 1],
-              extrapolate: "clamp",
-            });
+              const translateY = cardsProgress.interpolate({
+                inputRange: [start, end],
+                outputRange: [16, 0],
+                extrapolate: "clamp",
+              });
 
-            const translateY = cardsProgress.interpolate({
-              inputRange: [start, end],
-              outputRange: [16, 0],
-              extrapolate: "clamp",
-            });
+              const scale = cardsProgress.interpolate({
+                inputRange: [start, end],
+                outputRange: [0.96, 1],
+                extrapolate: "clamp",
+              });
 
-            const scale = cardsProgress.interpolate({
-              inputRange: [start, end],
-              outputRange: [0.96, 1],
-              extrapolate: "clamp",
-            });
+              return (
+                <Animated.View key={game.key} style={{ opacity, transform: [{ translateY }, { scale }] }}>
+                  <TouchableOpacity
+                    style={[styles.gameCardHorizontal, { borderColor: game.border }]}
+                    onPress={game.onPress}
+                  >
+                    <View style={styles.gameCardBackground}>
+                      <View style={[styles.gameBlobA, { backgroundColor: game.blobA }]} />
+                      <View style={[styles.gameBlobB, { backgroundColor: game.blobB }]} />
+                      <View style={[styles.gameDiagonal, { backgroundColor: game.diagonal }]} />
+                      <View style={styles.gameGloss} />
 
-            return (
-              <Animated.View key={game.key} style={{ opacity, transform: [{ translateY }, { scale }] }}>
-                <TouchableOpacity
-                  style={[styles.gameCardHorizontal, { borderColor: game.border }]}
-                  onPress={game.onPress}
-                >
-                  <View style={styles.gameCardBackground}>
-                    <View style={[styles.gameBlobA, { backgroundColor: game.blobA }]} />
-                    <View style={[styles.gameBlobB, { backgroundColor: game.blobB }]} />
-                    <View style={[styles.gameDiagonal, { backgroundColor: game.diagonal }]} />
-                    <View style={styles.gameGloss} />
+                      <Text style={styles.gameIcon}>{game.icon}</Text>
 
-                    <Text style={styles.gameIcon}>{game.icon}</Text>
-
-                    <View style={styles.gameFooter}>
-                      <Text style={styles.gameTitleHorizontal}>{game.title}</Text>
-                      <Text style={styles.gameSubtitleHorizontal}>{game.subtitle}</Text>
-                      <Text style={styles.gameCta}>JOUER</Text>
+                      <View style={styles.gameFooter}>
+                        <Text style={styles.gameTitleHorizontal}>{game.title}</Text>
+                        <Text style={styles.gameSubtitleHorizontal}>{game.subtitle}</Text>
+                        <Text style={styles.gameCta}>JOUER</Text>
+                      </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
-            );
-          })}
-        </ScrollView>
-      </View>
-
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </ScrollView>
+        </View>
       </ScrollView>
     </View>
   );

@@ -2,36 +2,13 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useRedirectIfAuthenticated } from "@/src/hooks/useRedirectIfAuthenticated";
 import PremiumBackground from "@/src/components/PremiumBackground";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
-const withAlpha = (hex: string, alpha: number): string => {
-  const rgba = hex.match(/^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)$/i);
-  if (rgba) {
-    const red = Number.parseInt(rgba[1], 10);
-    const green = Number.parseInt(rgba[2], 10);
-    const blue = Number.parseInt(rgba[3], 10);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-  }
-
-  const safeHex = hex.replace("#", "");
-  const value = safeHex.length === 3
-    ? safeHex.split("").map((char) => char + char).join("")
-    : safeHex;
-
-  const red = Number.parseInt(value.slice(0, 2), 16);
-  const green = Number.parseInt(value.slice(2, 4), 16);
-  const blue = Number.parseInt(value.slice(4, 6), 16);
-
-  if ([red, green, blue].some((channel) => Number.isNaN(channel))) {
-    return `rgba(255,255,255,${alpha})`;
-  }
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-};
-
 export default function LandingScreen() {
   const router = useRouter();
+  const checkingSession = useRedirectIfAuthenticated();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const glowAnim = useRef(new Animated.Value(0.6)).current;
@@ -70,6 +47,14 @@ export default function LandingScreen() {
     ).start();
   }, [fadeAnim, glowAnim, slideAnim]);
 
+  if (checkingSession) {
+    return (
+      <View style={styles.container}>
+        <PremiumBackground />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <PremiumBackground />
@@ -85,15 +70,15 @@ export default function LandingScreen() {
       >
         <Text style={styles.badge}>CASINO SOCIAL PREMIUM</Text>
         <Text style={styles.title}>LE TICKET GAGNANT</Text>
-        <Text style={styles.tagline}>Plongez dans une expérience de jeu immersive, élégante et ultra compétitive.</Text>
+        <Text style={styles.tagline}>Plongez dans une experience de jeu immersive, elegante et competitive.</Text>
 
         <View style={styles.highlightsRow}>
           <View style={styles.highlightPill}><Text style={styles.highlightText}>Dark Mode VIP</Text></View>
-          <View style={styles.highlightPill}><Text style={styles.highlightText}>Roulette • Blackjack • Poker</Text></View>
+          <View style={styles.highlightPill}><Text style={styles.highlightText}>Roulette / Blackjack / Poker</Text></View>
         </View>
 
         <View style={styles.heroPanel}>
-          <Text style={styles.heroPanelTitle}>Votre lounge est prêt.</Text>
+          <Text style={styles.heroPanelTitle}>Votre lounge est pret.</Text>
           <Text style={styles.heroPanelSubtitle}>Connectez-vous pour retrouver vos jetons, vos stats et vos tables en direct.</Text>
         </View>
 

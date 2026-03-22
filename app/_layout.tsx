@@ -1,8 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import {
-    DarkTheme,
-    ThemeProvider,
-} from "@react-navigation/native";
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -14,9 +11,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import ChipBalanceBadge from "@/src/components/ChipBalanceBadge";
 import { casinoTheme } from "@/src/theme/casinoTheme";
 
-export {
-    ErrorBoundary
-} from "expo-router";
+export { ErrorBoundary } from "expo-router";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -99,7 +94,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="roulette"
           options={{
-            title: "Roulette Électronique",
+            title: "Roulette Electronique",
             headerBackTitle: "Casino",
             headerRight: useMobileGameHeader ? () => <ChipBalanceBadge compact tiny /> : undefined,
           }}
@@ -148,4 +143,3 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 }
-

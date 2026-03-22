@@ -13,40 +13,21 @@ import {
 } from "react-native";
 
 import { Text, View } from "@/components/Themed";
+import { useRedirectIfAuthenticated } from "@/src/hooks/useRedirectIfAuthenticated";
 import PremiumBackground from "@/src/components/PremiumBackground";
 import { authApi } from "@/src/services/authApi";
 import { authStorage } from "@/src/services/authStorage";
+import {
+  isStrongPassword,
+  normalizeEmail,
+  normalizeUsername,
+  validateRegisterInput,
+} from "@/src/services/authValidation";
 import { casinoTheme } from "@/src/theme/casinoTheme";
-
-const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
-
-const withAlpha = (hex: string, alpha: number): string => {
-  const rgba = hex.match(/^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)$/i);
-  if (rgba) {
-    const red = Number.parseInt(rgba[1], 10);
-    const green = Number.parseInt(rgba[2], 10);
-    const blue = Number.parseInt(rgba[3], 10);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-  }
-
-  const safeHex = hex.replace("#", "");
-  const value = safeHex.length === 3
-    ? safeHex.split("").map((char) => char + char).join("")
-    : safeHex;
-
-  const red = Number.parseInt(value.slice(0, 2), 16);
-  const green = Number.parseInt(value.slice(2, 4), 16);
-  const blue = Number.parseInt(value.slice(4, 6), 16);
-
-  if ([red, green, blue].some((channel) => Number.isNaN(channel))) {
-    return `rgba(255,255,255,${alpha})`;
-  }
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-};
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const checkingSession = useRedirectIfAuthenticated();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,31 +73,23 @@ export default function RegisterScreen() {
 
   const hasConfirmValue = confirmPassword.length > 0;
   const passwordsMatch = password === confirmPassword;
-  const isStrongPassword = STRONG_PASSWORD_REGEX.test(password);
+  const passwordIsStrong = isStrongPassword(password);
 
   const handleRegister = async () => {
-    if (!username || !email || !password || !confirmPassword) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
-      return;
-    }
-
-    if (!isStrongPassword) {
-      Alert.alert(
-        "Erreur",
-        "Mot de passe trop faible. Utilisez au moins 8 caractères avec majuscule, minuscule, chiffre et caractère spécial.",
-      );
+    const validationError = validateRegisterInput(username, email, password, confirmPassword);
+    if (validationError) {
+      Alert.alert("Erreur", validationError);
       return;
     }
 
     try {
       setLoading(true);
 
-      const payload = await authApi.register(username, email, password);
+      const payload = await authApi.register(
+        normalizeUsername(username),
+        normalizeEmail(email),
+        password,
+      );
       await authStorage.setSession(payload.token, payload.user);
 
       router.replace({
@@ -132,6 +105,14 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <View style={styles.container}>
+        <PremiumBackground />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -151,11 +132,11 @@ export default function RegisterScreen() {
           ]}
         >
           <Text style={styles.badge}>NOUVEAU JOUEUR</Text>
-          <Text style={styles.title}>Créer un compte</Text>
+          <Text style={styles.title}>Creer un compte</Text>
           <Text style={styles.subtitle}>Rejoignez le lounge et recevez vos jetons de bienvenue.</Text>
 
           <View style={styles.infoPanel}>
-            <Text style={styles.infoPanelText}>Inscription sécurisée • Profil synchronisé • Accès instantané aux tables.</Text>
+            <Text style={styles.infoPanelText}>Inscription securisee. Profil synchronise. Acces instantane aux tables.</Text>
           </View>
 
           <TextInput
@@ -187,10 +168,10 @@ export default function RegisterScreen() {
           />
 
           {password.length > 0 ? (
-            <Text style={[styles.passwordHint, isStrongPassword ? styles.passwordHintOk : styles.passwordHintError]}>
-              {isStrongPassword
-                ? "✓ Mot de passe robuste"
-                : "✕ 8+ caractères, majuscule, minuscule, chiffre et spécial"}
+            <Text style={[styles.passwordHint, passwordIsStrong ? styles.passwordHintOk : styles.passwordHintError]}>
+              {passwordIsStrong
+                ? "OK Mot de passe robuste"
+                : "8+ caracteres, majuscule, minuscule, chiffre et special"}
             </Text>
           ) : null}
 
@@ -210,7 +191,7 @@ export default function RegisterScreen() {
 
           {hasConfirmValue ? (
             <Text style={[styles.passwordHint, passwordsMatch ? styles.passwordHintOk : styles.passwordHintError]}>
-              {passwordsMatch ? "✓ Les mots de passe correspondent" : "✕ Les mots de passe ne correspondent pas"}
+              {passwordsMatch ? "OK Les mots de passe correspondent" : "Les mots de passe ne correspondent pas"}
             </Text>
           ) : null}
 
@@ -229,8 +210,8 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.textLink} onPress={() => router.push("/login")}> 
-            <Text style={styles.textLinkLabel}>Déjà un compte ? Se connecter</Text>
+          <TouchableOpacity style={styles.textLink} onPress={() => router.push("/login")}>
+            <Text style={styles.textLinkLabel}>Deja un compte ? Se connecter</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>

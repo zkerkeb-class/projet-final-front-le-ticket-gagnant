@@ -1,6 +1,7 @@
 import { getApiBaseUrls } from "./apiBaseUrl";
 
 const REQUEST_TIMEOUT_MS = 9000;
+const AUTH_ERROR_STATUSES = new Set([400, 401, 404, 409]);
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit) => {
   const controller = new AbortController();
@@ -37,9 +38,32 @@ export type ProfileResponse = {
   updatedAt?: string;
 };
 
+export class AuthApiError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "AuthApiError";
+    this.status = status;
+  }
+}
+
+const parseErrorMessage = (error: unknown): string | null => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  if (error.name === "AbortError") {
+    return "Le serveur met trop de temps a repondre.";
+  }
+
+  return error.message;
+};
+
+const isFatalAuthStatus = (status: number): boolean => AUTH_ERROR_STATUSES.has(status);
+
 const postAuth = async (path: "/auth/login" | "/auth/register", payload: Record<string, unknown>): Promise<AuthResponse> => {
   const baseUrls = getApiBaseUrls();
-
   let latestError: string | null = null;
 
   for (const baseUrl of baseUrls) {
@@ -57,29 +81,28 @@ const postAuth = async (path: "/auth/login" | "/auth/register", payload: Record<
       if (!response.ok) {
         latestError = data?.message ?? "Erreur d'authentification.";
 
-        if (response.status === 400 || response.status === 401 || response.status === 409) {
-          throw new Error(latestError ?? "Erreur d'authentification.");
+        if (isFatalAuthStatus(response.status)) {
+          throw new AuthApiError(latestError ?? "Erreur d'authentification.", response.status);
         }
 
         continue;
       }
 
       if (!data?.token || !data?.user?.id) {
-        throw new Error("Réponse backend invalide.");
+        throw new AuthApiError("Reponse backend invalide.");
       }
 
       return data as AuthResponse;
-      } catch (error) {
-      if (error instanceof Error) {
-        latestError = error.name === "AbortError"
-          ? "Le serveur met trop de temps à répondre."
-          : error.message;
+    } catch (error) {
+      if (error instanceof AuthApiError) {
+        throw error;
       }
-      continue;
+
+      latestError = parseErrorMessage(error) ?? latestError;
     }
   }
 
-  throw new Error(latestError ?? "Backend indisponible. Vérifiez que l'API est lancée.");
+  throw new AuthApiError(latestError ?? "Backend indisponible. Verifiez que l'API est lancee.");
 };
 
 export const authApi = {
@@ -104,25 +127,24 @@ export const authApi = {
         const data = await response.json().catch(() => ({} as { message?: string }));
 
         if (!response.ok) {
-          latestError = data?.message ?? "Impossible de récupérer le profil.";
-          if (response.status === 401 || response.status === 404) {
-            throw new Error(latestError ?? "Impossible de récupérer le profil.");
+          latestError = data?.message ?? "Impossible de recuperer le profil.";
+          if (isFatalAuthStatus(response.status)) {
+            throw new AuthApiError(latestError ?? "Impossible de recuperer le profil.", response.status);
           }
           continue;
         }
 
         return data as ProfileResponse;
       } catch (error) {
-        if (error instanceof Error) {
-          latestError = error.name === "AbortError"
-            ? "Le serveur met trop de temps à répondre."
-            : error.message;
+        if (error instanceof AuthApiError) {
+          throw error;
         }
-        continue;
+
+        latestError = parseErrorMessage(error) ?? latestError;
       }
     }
 
-    throw new Error(latestError ?? "Backend indisponible.");
+    throw new AuthApiError(latestError ?? "Backend indisponible.");
   },
   async updateProfile(token: string, payload: { username?: string; email?: string }): Promise<ProfileResponse> {
     const baseUrls = getApiBaseUrls();
@@ -142,25 +164,24 @@ export const authApi = {
         const data = await response.json().catch(() => ({} as { message?: string }));
 
         if (!response.ok) {
-          latestError = data?.message ?? "Impossible de mettre à jour le profil.";
-          if (response.status === 400 || response.status === 401 || response.status === 409 || response.status === 404) {
-            throw new Error(latestError ?? "Impossible de mettre à jour le profil.");
+          latestError = data?.message ?? "Impossible de mettre a jour le profil.";
+          if (isFatalAuthStatus(response.status)) {
+            throw new AuthApiError(latestError ?? "Impossible de mettre a jour le profil.", response.status);
           }
           continue;
         }
 
         return data as ProfileResponse;
       } catch (error) {
-        if (error instanceof Error) {
-          latestError = error.name === "AbortError"
-            ? "Le serveur met trop de temps à répondre."
-            : error.message;
+        if (error instanceof AuthApiError) {
+          throw error;
         }
-        continue;
+
+        latestError = parseErrorMessage(error) ?? latestError;
       }
     }
 
-    throw new Error(latestError ?? "Backend indisponible.");
+    throw new AuthApiError(latestError ?? "Backend indisponible.");
   },
   async deleteProfile(token: string): Promise<{ message: string }> {
     const baseUrls = getApiBaseUrls();
@@ -179,23 +200,22 @@ export const authApi = {
 
         if (!response.ok) {
           latestError = data?.message ?? "Impossible de supprimer le profil.";
-          if (response.status === 401 || response.status === 404) {
-            throw new Error(latestError ?? "Impossible de supprimer le profil.");
+          if (isFatalAuthStatus(response.status)) {
+            throw new AuthApiError(latestError ?? "Impossible de supprimer le profil.", response.status);
           }
           continue;
         }
 
-        return { message: data?.message ?? "Compte supprimé." };
+        return { message: data?.message ?? "Compte supprime." };
       } catch (error) {
-        if (error instanceof Error) {
-          latestError = error.name === "AbortError"
-            ? "Le serveur met trop de temps à répondre."
-            : error.message;
+        if (error instanceof AuthApiError) {
+          throw error;
         }
-        continue;
+
+        latestError = parseErrorMessage(error) ?? latestError;
       }
     }
 
-    throw new Error(latestError ?? "Backend indisponible.");
+    throw new AuthApiError(latestError ?? "Backend indisponible.");
   },
 };

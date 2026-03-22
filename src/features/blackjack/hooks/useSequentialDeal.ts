@@ -45,8 +45,10 @@ export default function useSequentialDeal(
   const playerLengthsSignature = playerHandLengths.join("-");
 
   useEffect(() => {
+    const scheduledTimeouts = timeoutsRef.current;
+
     return () => {
-      clearAllTimeouts(timeoutsRef.current);
+      clearAllTimeouts(scheduledTimeouts);
     };
   }, []);
 

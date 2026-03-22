@@ -10,8 +10,9 @@ type ChipBalanceBadgeProps = {
   tiny?: boolean;
 };
 
-export default function ChipBalanceBadge({ userId, amount, compact = false, tiny = false }: ChipBalanceBadgeProps) {
+export default function ChipBalanceBadge({ userId: _userId, amount, compact = false, tiny = false }: ChipBalanceBadgeProps) {
   const [remoteAmount, setRemoteAmount] = useState<number | null>(null);
+  const [storedAmount, setStoredAmount] = useState<number | null>(null);
 
   const loadBalance = useCallback(async () => {
     if (typeof amount === "number") {
@@ -39,6 +40,7 @@ export default function ChipBalanceBadge({ userId, amount, compact = false, tiny
         const data = await response.json() as { chipBalance?: number };
         if (typeof data.chipBalance === "number") {
           setRemoteAmount(data.chipBalance);
+          void authStorage.updateChipBalance(data.chipBalance);
           return;
         }
       } catch {
@@ -47,7 +49,38 @@ export default function ChipBalanceBadge({ userId, amount, compact = false, tiny
     }
 
     setRemoteAmount(null);
-  }, [amount, userId]);
+  }, [amount]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadStoredAmount = async () => {
+      const user = await authStorage.getUser();
+      if (active) {
+        setStoredAmount(user?.chipBalance ?? null);
+      }
+    };
+
+    void loadStoredAmount();
+
+    const unsubscribe = authStorage.subscribe((user) => {
+      setStoredAmount(user?.chipBalance ?? null);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof amount !== "number") {
+      return;
+    }
+
+    setRemoteAmount(null);
+    void authStorage.updateChipBalance(amount);
+  }, [amount]);
 
   useEffect(() => {
     if (typeof amount === "number") {
@@ -58,18 +91,18 @@ export default function ChipBalanceBadge({ userId, amount, compact = false, tiny
     loadBalance();
 
     const interval = setInterval(() => {
-      loadBalance();
+      void loadBalance();
     }, 2500);
 
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        loadBalance();
+        void loadBalance();
       }
     });
 
     const visibilityHandler = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        loadBalance();
+        void loadBalance();
       }
     };
 
@@ -87,13 +120,16 @@ export default function ChipBalanceBadge({ userId, amount, compact = false, tiny
   }, [amount, loadBalance]);
 
   const displayAmount = useMemo(() => {
-    const resolved = typeof amount === "number" ? amount : remoteAmount;
+    const resolved = typeof amount === "number"
+      ? amount
+      : (typeof remoteAmount === "number" ? remoteAmount : storedAmount);
+
     if (typeof resolved !== "number") {
       return "--";
     }
 
     return resolved.toFixed(2);
-  }, [amount, remoteAmount]);
+  }, [amount, remoteAmount, storedAmount]);
 
   return (
     <View style={[styles.badge, compact ? styles.badgeCompact : null, tiny ? styles.badgeTiny : null]}>

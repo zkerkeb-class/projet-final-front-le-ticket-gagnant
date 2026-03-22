@@ -279,7 +279,7 @@ export default function BaccaratScreen() {
     });
 
     return clearTimers;
-  }, [gameState?.betAmount, gameState?.result]);
+  }, [gameState]);
 
   useEffect(() => {
     if (!gameState || isDealing) {

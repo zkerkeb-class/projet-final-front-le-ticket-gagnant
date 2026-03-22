@@ -1,4 +1,3 @@
-import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,6 +39,7 @@ type HandScore = {
 };
 
 const REQUEST_TIMEOUT_MS = 9000;
+const DEFAULT_POKER_STACK = 3000;
 const TURN_SECONDS = 12;
 const STREETS = ["Pré-flop", "Flop", "Turn", "River", "Showdown"] as const;
 const AI_NAMES = ["Viper", "Orion", "Nova", "Blaze", "Kronos", "Echo", "Lyra", "Rogue"];
@@ -94,8 +94,6 @@ const randomInt = (min: number, max: number): number => {
 };
 
 export default function PokerScreen() {
-  const params = useLocalSearchParams<{ userId?: string | string[] }>();
-  const routeUserId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
   const { width } = useWindowDimensions();
   const isPhone = width < 430;
 
@@ -107,7 +105,7 @@ export default function PokerScreen() {
   const [currentBet, setCurrentBet] = useState<number>(40);
   const [raiseTo, setRaiseTo] = useState<number>(80);
   const [handNumber, setHandNumber] = useState<number>(1);
-  const [statusText, setStatusText] = useState<string>("Configurez la table puis démarrez la partie.");
+  const [statusText, setStatusText] = useState<string>("Configurez la table puis demarrez la partie.");
   const [started, setStarted] = useState(false);
   const [awaitingUser, setAwaitingUser] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -123,6 +121,8 @@ export default function PokerScreen() {
   const turnTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aiActionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turnTokenRef = useRef<number>(0);
+  const launchNewHandRef = useRef<((basePlayers: Player[], nextHandNumber: number) => void) | null>(null);
+  const startStreetRoundRef = useRef<((streetPlayers: Player[], streetPhase: number, streetBoard: Card[], streetPot: number, streetCurrentBet: number) => void) | null>(null);
 
   const playersRef = useRef<Player[]>([]);
   const boardRef = useRef<Card[]>([]);
@@ -236,7 +236,7 @@ export default function PokerScreen() {
 
     setSyncing(true);
     try {
-      setStatusText("Mode sécurisé: synchronisation poker distante désactivée.");
+      setStatusText("Table locale: le stack poker reste separe du portefeuille principal.");
     } finally {
       setSyncing(false);
     }
@@ -246,7 +246,7 @@ export default function PokerScreen() {
     try {
       setLoading(true);
 
-      let startingChips = 3000;
+      let startingChips = DEFAULT_POKER_STACK;
       try {
         const balance = await apiCall("/users/balance") as { chipBalance?: number };
         if (typeof balance.chipBalance === "number") {
@@ -287,7 +287,7 @@ export default function PokerScreen() {
       setStarted(true);
       setHandNumber(1);
       handNumberRef.current = 1;
-      launchNewHand(tablePlayers, 1);
+      launchNewHandRef.current?.(tablePlayers, 1);
     } catch (error) {
       Alert.alert("Erreur", error instanceof Error ? error.message : "Impossible de lancer la table.");
     } finally {
@@ -352,7 +352,7 @@ export default function PokerScreen() {
     const currentUser = resetPlayers.find((player) => player.isUser);
     userHandStartRef.current = currentUser?.chips ?? 0;
 
-    startStreetRound([...resetPlayers], 0, [], nextPot, 40);
+    startStreetRoundRef.current?.([...resetPlayers], 0, [], 0, 40);
   }, [clearTurnTimers, syncTableState]);
 
   const postBlind = (player: Player, amount: number, label: string) => {
@@ -398,11 +398,11 @@ export default function PokerScreen() {
     handNumberRef.current = nextHand;
 
     setTimeout(() => {
-      launchNewHand(cleared, nextHand);
+      launchNewHandRef.current?.(cleared, nextHand);
     }, 2100);
 
     void finalPot;
-  }, [clearTurnTimers, launchNewHand, persistDelta, syncTableState]);
+  }, [clearTurnTimers, persistDelta, syncTableState]);
 
   const doShowdown = useCallback((basePlayers: Player[], currentPot: number, boardCards: Card[]) => {
     const contenders = basePlayers.filter((player) => !player.folded);
@@ -511,7 +511,7 @@ export default function PokerScreen() {
         setStatusText(`${STREETS[nextPhase]} · Nouveau tour de parole.`);
 
         setTimeout(() => {
-          startStreetRound(resetPlayers, nextPhase, updatedBoard, potRef.current, 0);
+          startStreetRoundRef.current?.(resetPlayers, nextPhase, updatedBoard, potRef.current, 0);
         }, 350);
         return;
       }
@@ -590,7 +590,7 @@ export default function PokerScreen() {
           target.status = callAmount === 0 ? "Check" : `Call ${paid}`;
         }
 
-        const updatedPot = nextPlayers.reduce((sum, player) => sum + player.bet, 0);
+        const updatedPot = streetPot + nextPlayers.reduce((sum, player) => sum + player.bet, 0);
         syncTableState({
           players: nextPlayers,
           pot: updatedPot,
@@ -638,6 +638,14 @@ export default function PokerScreen() {
 
     runNextTurn();
   }, [clearTurnTimers, doShowdown, finishHand, raiseTo, syncTableState]);
+
+  useEffect(() => {
+    launchNewHandRef.current = launchNewHand;
+  }, [launchNewHand]);
+
+  useEffect(() => {
+    startStreetRoundRef.current = startStreetRound;
+  }, [startStreetRound]);
 
   const userActionResolverRef = useRef<((action: "FOLD" | "CALL" | "RAISE") => void) | null>(null);
 
@@ -734,7 +742,7 @@ export default function PokerScreen() {
           <View style={[styles.lobbyCard, isPhone && styles.lobbyCardPhone]}>
             <Text style={styles.lobbyTag}>PREMIUM TABLE</Text>
             <Text style={[styles.lobbyTitle, isPhone && styles.lobbyTitlePhone]}>Texas Hold'em Pro</Text>
-            <Text style={styles.lobbySubtitle}>Choisissez le nombre d'adversaires IA puis asseyez-vous à la table.</Text>
+            <Text style={styles.lobbySubtitle}>Choisissez le nombre d'adversaires IA puis lancez une table locale de poker.</Text>
 
             <View style={styles.aiRow}>
               <Pressable style={styles.aiButton} onPress={() => setLobbyAiCount((v) => Math.max(2, v - 1))}>
@@ -747,7 +755,7 @@ export default function PokerScreen() {
             </View>
 
             <Pressable style={[styles.ctaButton, isPhone && styles.ctaButtonPhone]} onPress={startTable} disabled={loading}>
-              {loading ? <ActivityIndicator color="#24180b" /> : <Text style={styles.ctaText}>S'ASSEOIR À LA TABLE</Text>}
+              {loading ? <ActivityIndicator color="#24180b" /> : <Text style={styles.ctaText}>LANCER LA TABLE</Text>}
             </Pressable>
           </View>
         </View>
@@ -756,9 +764,13 @@ export default function PokerScreen() {
           <View style={[styles.headerBar, isPhone && styles.headerBarPhone]}>
             <View>
               <Text style={[styles.headerTitle, isPhone && styles.headerTitlePhone]}>Texas Hold'em Pro</Text>
-              <Text style={styles.headerSubtitle}>{`Main #${handNumber} · ${STREETS[phase]}`}</Text>
+              <Text style={styles.headerSubtitle}>{`Main #${handNumber} - ${STREETS[phase]}`}</Text>
             </View>
-            <ChipBalanceBadge userId={routeUserId} amount={user?.chips} compact />
+            <View style={styles.headerBalanceGroup}>
+              <ChipBalanceBadge compact />
+              <Text style={styles.headerBalanceStack}>{`Stack table: ${user?.chips ?? DEFAULT_POKER_STACK} jetons`}</Text>
+              <Text style={styles.headerBalanceHint}>Le portefeuille global reste separe de cette table.</Text>
+            </View>
           </View>
 
           <View style={[styles.tableWrap, isPhone && styles.tableWrapPhone]}>
@@ -1067,6 +1079,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerBalanceGroup: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  headerBalanceStack: {
+    color: casinoTheme.colors.text,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  headerBalanceHint: {
+    color: casinoTheme.colors.textMuted,
+    fontSize: 10,
+    maxWidth: 180,
+    textAlign: "right",
   },
   headerBarPhone: {
     paddingHorizontal: 0,

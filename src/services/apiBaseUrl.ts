@@ -33,10 +33,10 @@ export const getApiBaseUrls = (suffix = ""): string[] => {
     : "";
 
   const explicitBase = API_BASE_URL ? normalizeApiBase(API_BASE_URL) : null;
-
-  const baseCandidates = explicitBase
-    ? [explicitBase]
-    : (isDevMode() ? getDevFallbackBaseUrls() : []);
+  const baseCandidates = [
+    ...(explicitBase ? [explicitBase] : []),
+    ...(isDevMode() ? getDevFallbackBaseUrls() : []),
+  ];
 
   if (baseCandidates.length === 0) {
     throw new Error("EXPO_PUBLIC_API_URL est requis en production.");

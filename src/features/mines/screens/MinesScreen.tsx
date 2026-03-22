@@ -85,6 +85,12 @@ export default function MinesScreen() {
   const flipValuesRef = useRef(Array.from({ length: 25 }, () => new Animated.Value(0)));
   const previousSessionRef = useRef<string | undefined>(undefined);
   const previouslyRevealedRef = useRef<Set<number>>(new Set());
+  const gridSize = gameState?.gridSize ?? 25;
+  const flipValues = flipValuesRef.current.length === gridSize
+    ? flipValuesRef.current
+    : (flipValuesRef.current = Array.from({ length: gridSize }, (_, index) => (
+        flipValuesRef.current[index] ?? new Animated.Value(0)
+      )));
 
   const gridBoardSize = useMemo(() => {
     const availableWidth = isWide ? width - 460 : width - 56;
@@ -223,24 +229,24 @@ export default function MinesScreen() {
     if (!gameState?.sessionId) {
       previousSessionRef.current = undefined;
       previouslyRevealedRef.current = new Set();
-      flipValuesRef.current.forEach((value) => value.setValue(0));
+      flipValues.forEach((value) => value.setValue(0));
       return;
     }
 
     if (previousSessionRef.current !== gameState.sessionId) {
       previousSessionRef.current = gameState.sessionId;
       previouslyRevealedRef.current = new Set();
-      flipValuesRef.current.forEach((value) => value.setValue(0));
+      flipValues.forEach((value) => value.setValue(0));
     }
 
     const currentlyRevealed = gameState.status === "ACTIVE"
       ? new Set<number>([...gameState.revealedCells, ...gameState.revealedMines])
-      : new Set<number>(Array.from({ length: gameState.gridSize }, (_, index) => index));
+      : new Set<number>(Array.from({ length: gridSize }, (_, index) => index));
     const newlyRevealed = Array.from(currentlyRevealed).filter((index) => !previouslyRevealedRef.current.has(index));
 
     if (newlyRevealed.length > 0) {
       const animations = newlyRevealed.map((index) =>
-        Animated.timing(flipValuesRef.current[index], {
+        Animated.timing(flipValues[index], {
           toValue: 1,
           duration: 320,
           easing: Easing.out(Easing.cubic),
@@ -252,9 +258,9 @@ export default function MinesScreen() {
     }
 
     previouslyRevealedRef.current = currentlyRevealed;
-  }, [gameState?.sessionId, gameState?.revealedCells, gameState?.revealedMines, gameState?.status, gameState?.gridSize]);
+  }, [flipValues, gameState?.sessionId, gameState?.revealedCells, gameState?.revealedMines, gameState?.status, gridSize]);
 
-  const gridItems = Array.from({ length: 25 }, (_, index) => index);
+  const gridItems = Array.from({ length: gridSize }, (_, index) => index);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -355,7 +361,7 @@ export default function MinesScreen() {
                     const isMine = revealedMines.has(cellIndex);
                     const isExploded = gameState.explodedCell === cellIndex;
                     const shouldShowDiamond = !isMine && (isRevealed || isRoundFinished);
-                    const flipValue = flipValuesRef.current[cellIndex];
+                    const flipValue = flipValues[cellIndex];
 
                     const frontFaceStyle = {
                       transform: [

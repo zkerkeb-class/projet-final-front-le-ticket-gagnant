@@ -1,17 +1,21 @@
 # Production Readiness - Frontend
 
-## Checklist P0
+## Checklist
 
-- [x] Base URL API configurable via variable d'environnement
-- [x] Gestion de session sécurisée (mobile + web)
-- [x] Lint et typecheck automatisés en CI
+- [x] URL d'API configurable par variable d'environnement
+- [x] Session geree sur web et mobile
+- [x] `npm run lint` passe
+- [x] `npm run typecheck` passe
 
-## Commandes locales
+## Commandes utiles
 
+- `npm install`
+- `npm run start`
+- `npm run web`
 - `npm run lint`
 - `npm run typecheck`
-- `npm run web`
 
-## Variables d'environnement critiques
+## Variables d'environnement
 
 - `EXPO_PUBLIC_API_URL`
+- `EXPO_PUBLIC_USER_ID` optionnel

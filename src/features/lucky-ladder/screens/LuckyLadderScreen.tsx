@@ -296,7 +296,9 @@ export default function LuckyLadderScreen() {
   };
 
   const history = gameState?.history ?? [];
-  const nextBreakPercent = gameState?.nextBreakChance ? Math.round(gameState.nextBreakChance * 100) : null;
+  const nextBreakPercent = typeof gameState?.nextBreakChance === "number"
+    ? Math.round(gameState.nextBreakChance * 100)
+    : null;
 
   const fallTranslateY = fallAnim.interpolate({
     inputRange: [0, 1],
@@ -413,7 +415,7 @@ export default function LuckyLadderScreen() {
                   </View>
                   <View>
                     <Text style={styles.infoLabel}>Risque suivant</Text>
-                    <Text style={styles.infoValue}>{nextBreakPercent ? `${nextBreakPercent}%` : "--"}</Text>
+                    <Text style={styles.infoValue}>{nextBreakPercent !== null ? `${nextBreakPercent}%` : "--"}</Text>
                   </View>
                   <View>
                     <Text style={styles.infoLabel}>Payout</Text>
