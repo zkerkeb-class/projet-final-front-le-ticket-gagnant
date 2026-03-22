@@ -1,0 +1,42 @@
+export const rouletteTheme = {
+  colors: {
+    background: "#05070f",
+    backgroundAlt: "#0b1020",
+    panel: "rgba(16, 22, 44, 0.58)",
+    panelBorder: "rgba(137, 201, 255, 0.35)",
+    panelGlow: "rgba(92, 223, 255, 0.24)",
+    textPrimary: "#e8f3ff",
+    textSecondary: "#8ea5d1",
+    cyan: "#4de7ff",
+    violet: "#8f6bff",
+    gold: "#ffcf5a",
+    warmGold: "#ffb347",
+    red: "#e43f67",
+    black: "#151824",
+    success: "#22c55e",
+    danger: "#ef4444",
+    buttonGloss: "rgba(255, 255, 255, 0.2)",
+  },
+  radii: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 22,
+  },
+  shadows: {
+    gold: {
+      shadowColor: "#ffcf5a",
+      shadowOpacity: 0.45,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    neon: {
+      shadowColor: "#4de7ff",
+      shadowOpacity: 0.45,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 8,
+    },
+  },
+} as const;

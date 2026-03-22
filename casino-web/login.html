@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connexion - Le Ticket Gagnant</title>
+  <link rel="stylesheet" href="assets/premium.css" />
+</head>
+<body>
+  <main class="auth-wrap">
+    <section class="auth-card glass">
+      <h2>Connexion</h2>
+      <p>Retrouvez votre table et votre solde instantanément.</p>
+
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="joueur@casino.com" required />
+        </div>
+
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input id="password" type="password" placeholder="••••••••" required />
+        </div>
+
+        <button class="btn btn-primary" type="submit">Se connecter</button>
+        <p id="form-message" class="message"></p>
+      </form>
+
+      <div class="auth-footer">
+        Nouveau joueur ? <a href="register.html">Créer un compte</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>
